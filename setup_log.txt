@@ -1,0 +1,136 @@
+[1/3] Copying project files...
+  Copied file: .env
+  Copied file: .env.template
+  Copied dir:  agents
+  Copied dir:  config
+  Copied file: orchestrator.py
+  Copied file: Rashed_Alneyadi_Resume.pdf
+  Copied file: README.md
+  Copied file: requirements.txt
+  Copied file: setup_notion.py
+  Copied file: START_JOBHUNTER.bat
+  Copied file: __init__.py
+
+[2/3] Installing Python dependencies...
+Defaulting to user installation because normal site-packages is not writeable
+Collecting python-jobspy>=1.1.70 (from -r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading python_jobspy-1.1.82-py3-none-any.whl.metadata (10 kB)
+Collecting playwright>=1.44.0 (from -r C:\Users\Lordy\jobhuntrr\requirements.txt (line 8))
+  Downloading playwright-1.60.0-py3-none-win_amd64.whl.metadata (3.5 kB)
+Collecting apscheduler>=3.10.4 (from -r C:\Users\Lordy\jobhuntrr\requirements.txt (line 12))
+  Downloading apscheduler-3.11.2-py3-none-any.whl.metadata (6.4 kB)
+Requirement already satisfied: requests>=2.31.0 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from -r C:\Users\Lordy\jobhuntrr\requirements.txt (line 15)) (2.32.5)
+Collecting python-dotenv>=1.0.0 (from -r C:\Users\Lordy\jobhuntrr\requirements.txt (line 18))
+  Downloading python_dotenv-1.2.2-py3-none-any.whl.metadata (27 kB)
+Requirement already satisfied: pandas>=2.0.0 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from -r C:\Users\Lordy\jobhuntrr\requirements.txt (line 21)) (2.3.2)
+Collecting NUMPY==1.26.3 (from python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading numpy-1.26.3.tar.gz (15.7 MB)
+     ---------------------------------------- 15.7/15.7 MB 253.1 kB/s  0:00:58
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Installing backend dependencies: started
+  Installing backend dependencies: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): still running...
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting beautifulsoup4<5.0.0,>=4.12.2 (from python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading beautifulsoup4-4.14.3-py3-none-any.whl.metadata (3.8 kB)
+Collecting markdownify<0.14.0,>=0.13.1 (from python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading markdownify-0.13.1-py3-none-any.whl.metadata (8.5 kB)
+Collecting pydantic<3.0.0,>=2.3.0 (from python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading pydantic-2.13.4-py3-none-any.whl.metadata (109 kB)
+Collecting regex<2025.0.0,>=2024.4.28 (from python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading regex-2024.11.6-cp313-cp313-win_amd64.whl.metadata (41 kB)
+Collecting tls-client<2.0.0,>=1.0.1 (from python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading tls_client-1.0.1-py3-none-any.whl.metadata (5.0 kB)
+Requirement already satisfied: charset_normalizer<4,>=2 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from requests>=2.31.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 15)) (3.4.3)
+Requirement already satisfied: idna<4,>=2.5 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from requests>=2.31.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 15)) (3.10)
+Requirement already satisfied: urllib3<3,>=1.21.1 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from requests>=2.31.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 15)) (2.5.0)
+Requirement already satisfied: certifi>=2017.4.17 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from requests>=2.31.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 15)) (2025.8.3)
+Requirement already satisfied: python-dateutil>=2.8.2 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from pandas>=2.0.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 21)) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from pandas>=2.0.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 21)) (2025.2)
+Requirement already satisfied: tzdata>=2022.7 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from pandas>=2.0.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 21)) (2025.2)
+Collecting soupsieve>=1.6.1 (from beautifulsoup4<5.0.0,>=4.12.2->python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading soupsieve-2.8.4-py3-none-any.whl.metadata (4.6 kB)
+Requirement already satisfied: typing-extensions>=4.0.0 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from beautifulsoup4<5.0.0,>=4.12.2->python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5)) (4.15.0)
+Requirement already satisfied: six<2,>=1.15 in c:\users\lordy\appdata\roaming\python\python313\site-packages (from markdownify<0.14.0,>=0.13.1->python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5)) (1.17.0)
+Collecting annotated-types>=0.6.0 (from pydantic<3.0.0,>=2.3.0->python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.46.4 (from pydantic<3.0.0,>=2.3.0->python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading pydantic_core-2.46.4-cp313-cp313-win_amd64.whl.metadata (6.7 kB)
+Collecting typing-inspection>=0.4.2 (from pydantic<3.0.0,>=2.3.0->python-jobspy>=1.1.70->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 5))
+  Downloading typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+Collecting pyee<14,>=13 (from playwright>=1.44.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 8))
+  Downloading pyee-13.0.1-py3-none-any.whl.metadata (3.0 kB)
+Collecting greenlet<4.0.0,>=3.1.1 (from playwright>=1.44.0->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 8))
+  Downloading greenlet-3.5.1-cp313-cp313-win_amd64.whl.metadata (3.9 kB)
+Collecting tzlocal>=3.0 (from apscheduler>=3.10.4->-r C:\Users\Lordy\jobhuntrr\requirements.txt (line 12))
+  Downloading tzlocal-5.3.1-py3-none-any.whl.metadata (7.6 kB)
+Downloading python_jobspy-1.1.82-py3-none-any.whl (52 kB)
+Downloading beautifulsoup4-4.14.3-py3-none-any.whl (107 kB)
+Downloading markdownify-0.13.1-py3-none-any.whl (10 kB)
+Downloading pydantic-2.13.4-py3-none-any.whl (472 kB)
+Downloading pydantic_core-2.46.4-cp313-cp313-win_amd64.whl (2.1 MB)
+   ---------------------------------------- 2.1/2.1 MB 201.1 kB/s  0:00:09
+Downloading regex-2024.11.6-cp313-cp313-win_amd64.whl (273 kB)
+Downloading tls_client-1.0.1-py3-none-any.whl (41.3 MB)
+   ---------------------------------------- 41.3/41.3 MB 323.8 kB/s  0:02:38
+Downloading playwright-1.60.0-py3-none-win_amd64.whl (37.9 MB)
+   ---------------------------------------- 37.9/37.9 MB 268.4 kB/s  0:02:17
+Downloading greenlet-3.5.1-cp313-cp313-win_amd64.whl (238 kB)
+Downloading pyee-13.0.1-py3-none-any.whl (15 kB)
+Downloading apscheduler-3.11.2-py3-none-any.whl (64 kB)
+Downloading python_dotenv-1.2.2-py3-none-any.whl (22 kB)
+Downloading annotated_types-0.7.0-py3-none-any.whl (13 kB)
+Downloading soupsieve-2.8.4-py3-none-any.whl (37 kB)
+Downloading typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+Downloading tzlocal-5.3.1-py3-none-any.whl (18 kB)
+Building wheels for collected packages: NUMPY
+  Building wheel for NUMPY (pyproject.toml): started
+  Building wheel for NUMPY (pyproject.toml): finished with status 'done'
+  Created wheel for NUMPY: filename=numpy-1.26.3-cp313-cp313-win_amd64.whl size=20437411 sha256=c0d053e59f91083e7f50777d0c393220d0bbe318beabf18ea69916abe6e6d615
+  Stored in directory: c:\users\lordy\appdata\local\pip\cache\wheels\cd\80\5a\8deaed51e64f65a6fa8d0bd4078495e3d242f13a65f6a627d0
+Successfully built NUMPY
+Installing collected packages: tls-client, tzlocal, typing-inspection, soupsieve, regex, python-dotenv, pyee, pydantic-core, NUMPY, greenlet, annotated-types, pydantic, playwright, beautifulsoup4, apscheduler, markdownify, python-jobspy
+  Attempting uninstall: NUMPY
+    Found existing installation: numpy 2.2.6
+    Uninstalling numpy-2.2.6:
+      Successfully uninstalled numpy-2.2.6
+
+Successfully installed NUMPY-1.26.3 annotated-types-0.7.0 apscheduler-3.11.2 beautifulsoup4-4.14.3 greenlet-3.5.1 markdownify-0.13.1 playwright-1.60.0 pydantic-2.13.4 pydantic-core-2.46.4 pyee-13.0.1 python-dotenv-1.2.2 python-jobspy-1.1.82 regex-2024.11.6 soupsieve-2.8.4 tls-client-1.0.1 typing-inspection-0.4.2 tzlocal-5.3.1
+
+pip install OK
+
+[3/3] Installing Playwright Chromium...
+Downloading Chrome for Testing 148.0.7778.96 (playwright chromium v1223)[2m from https://cdn.playwright.dev/builds/cft/148.0.7778.96/win64/chrome-win64.zip[22m
+|                                                                                |   0% of 181.9 MiB
+|■■■■■■■■                                                                        |  10% of 181.9 MiB
+|■■■■■■■■■■■■■■■■                                                                |  20% of 181.9 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 181.9 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 181.9 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 181.9 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 181.9 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 181.9 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 181.9 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 181.9 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 181.9 MiB
+Chrome for Testing 148.0.7778.96 (playwright chromium v1223) downloaded to C:\Users\Lordy\AppData\Local\ms-playwright\chromium-1223
+Downloading Chrome Headless Shell 148.0.7778.96 (playwright chromium-headless-shell v1223)[2m from https://cdn.playwright.dev/builds/cft/148.0.7778.96/win64/chrome-headless-shell-win64.zip[22m
+|                                                                                |   0% of 112.4 MiB
+|■■■■■■■■                                                                        |  10% of 112.4 MiB
+|■■■■■■■■■■■■■■■■                                                                |  20% of 112.4 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■                                                        |  30% of 112.4 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                                |  40% of 112.4 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                        |  50% of 112.4 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                                |  60% of 112.4 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                        |  70% of 112.4 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■                |  80% of 112.4 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■        |  90% of 112.4 MiB
+|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■| 100% of 112.4 MiB
+Chrome Headless Shell 148.0.7778.96 (playwright chromium-headless-shell v1223) downloaded to C:\Users\Lordy\AppData\Local\ms-playwright\chromium_headless_shell-1223
+
+playwright install OK
+
+=== SETUP COMPLETE ===

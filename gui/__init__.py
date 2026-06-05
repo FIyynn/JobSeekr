@@ -1,0 +1,1 @@
+# JobHuntrr GUI package

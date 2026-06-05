@@ -1,0 +1,20 @@
+{
+  "env": {
+    "STORAGE_BACKEND": "local",
+    "AUTO_ENRICH_PROFILE": "0",
+    "PROFILE_DUAL_LAYER": "1",
+    "INTERACTIVE_APPLY": "0",
+    "NOTION_TOKEN": "",
+    "NOTION_DATABASE_ID": "",
+    "APPLICANT_EMAIL": "",
+    "APPLICANT_PHONE": "",
+    "LINKEDIN_EMAIL": "",
+    "LINKEDIN_PASSWORD": ""
+  },
+  "linkedin": "https://linkedin.com/in/rashed-alneyadi",
+  "github": "https://github.com/brshood",
+  "website": "https://rashed-alneyadi.com",
+  "other": "https://rectifygo.com",
+  "resume_path": "C:\\Users\\Lordy\\jobhuntrr\\Rashed_Alneyadi_Resume.pdf",
+  "extra_links": {}
+}

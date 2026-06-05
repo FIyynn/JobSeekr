@@ -1,0 +1,4 @@
+Setup completed successfully.
+Fill in C:/Users/Lordy/jobhuntrr/.env then run:
+  python setup_notion.py --page-id YOUR_PAGE_ID
+  python orchestrator.py --run-once

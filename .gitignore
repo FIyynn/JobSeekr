@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.template
+data/profile_settings.json
+data/.env_migrated_to_profile_settings
+data/linkedin_session/
+data/portal_credentials.dpapi.json
+data/portal_registry.json
+logs/
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -1,0 +1,62 @@
+"""
+LinkedIn One-Time Login Setup
+Run ONCE: python setup_linkedin.py
+Reads LINKEDIN_EMAIL + LINKEDIN_PASSWORD from .env and logs in automatically.
+Session is saved to data/linkedin_session/ and reused forever.
+"""
+import sys, os, time
+sys.path.insert(0, os.path.dirname(__file__))
+
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv()
+
+from playwright.sync_api import sync_playwright
+
+SESSION_DIR = str(Path(__file__).parent / "data" / "linkedin_session")
+os.makedirs(SESSION_DIR, exist_ok=True)
+
+EMAIL    = os.getenv("LINKEDIN_EMAIL", "").strip()
+PASSWORD = os.getenv("LINKEDIN_PASSWORD", "").strip()
+
+print("=" * 60)
+print("  LinkedIn Session Setup")
+print("=" * 60)
+print(f"\nSession will be saved to:\n  {SESSION_DIR}\n")
+
+if not EMAIL or not PASSWORD:
+    print("ERROR: LINKEDIN_EMAIL and LINKEDIN_PASSWORD must be set in .env")
+    print("Add these lines to C:\\Users\\Lordy\\jobhuntrr\\.env:")
+    print("  LINKEDIN_EMAIL=your@email.com")
+    print("  LINKEDIN_PASSWORD=yourpassword")
+    sys.exit(1)
+
+print(f"Logging in as: {EMAIL}")
+print("Opening browser...\n")
+
+with sync_playwright() as p:
+    ctx = p.chromium.launch_persistent_context(
+        user_data_dir=SESSION_DIR,
+        headless=False,
+        args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        ),
+        viewport={"width": 1440, "height": 900},
+    )
+    ctx.add_init_script(
+        "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+    )
+    page = ctx.new_page()
+
+    # Check if already logged in
+    page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=15000)
+    time.sleep(2)
+
+    if "feed" in page.url or "mynetwork" in page.url:
+        print("Already logged in! Session is valid.")
+        ctx.close()
+    else:
+        # Navigate to login page and fill credentials
+        page.goto("https://www.linkedin.com/login", wait_until="domconten

@@ -1,0 +1,6 @@
+output/
+fixtures/profile_settings.json
+fixtures/profile_links.json
+reports/*.md
+!reports/.gitkeep
+!output/.gitkeep

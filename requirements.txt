@@ -1,0 +1,31 @@
+# JobHunter — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# Job scraping
+python-jobspy>=1.1.70
+
+# Browser automation
+playwright>=1.44.0
+# After installing: playwright install chromium
+
+# Scheduling (Windows-compatible)
+apscheduler>=3.10.4
+
+# HTTP
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Hidden opportunity / signal discovery (free, no API key)
+duckduckgo-search>=6.1.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# Data
+pandas>=2.0.0
+
+# Resume parsing (profile builder)
+pypdf>=4.0.0
+
+# Optional: stealth (reduces bot detection)
+# playwright-stealth>=1.0.6
