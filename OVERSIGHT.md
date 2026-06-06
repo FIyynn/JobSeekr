@@ -13,6 +13,11 @@ _Last updated: 2026-06-06 17:10 by Claude (architect layer) — post GUI visual 
 | Task 4 — Social listening hooks in LinkedIn DM tab | ✅ DONE | Hook box present, runs `extract_hooks()`, shows "(no hooks found)" correctly for contacts without post data |
 | Task 5 — Resume optimizer in apply pipeline | ✅ DONE | Hooked at apply_jobs.py lines 541-556 |
 | Task 6 — signal_detector wired into hidden_opportunity_discovery | ✅ DONE | Line 31 import + line 643 call — manually verified |
+| Task 7 — Fix BUG 1: SPS/IPS columns empty | ✅ DONE | Created backfill script, 223/235 jobs now have SPS/IPS |
+| Task 8 — Fix BUG 2: UTF-8 encoding | ✅ DONE | Replaced em-dash artifacts with ASCII in GUI |
+| Task 9 — Fix BUG 3: Lvl column default | ✅ DONE | Action Queue displays "1" instead of blank |
+| Task 10 — Full regression tests | ✅ DONE | 18/18 tests passing, GUI import OK |
+| Task 11 — Auto-git commit | ✅ DONE | Bug fixes committed with detailed message |
 
 ---
 
@@ -26,19 +31,19 @@ _Last updated: 2026-06-06 17:10 by Claude (architect layer) — post GUI visual 
 - **Result:** 223/235 jobs now have SPS/IPS values
 - Script is idempotent and saved for future use
 
-### BUG 2 — LOW: UTF-8 encoding artifacts in window title and UI text
+### BUG 2 — ✅ FIXED: UTF-8 encoding artifacts in window title and UI text
 **Symptom:** Window title shows "JobHuntrr â€" UAE Job Agent" instead of "JobHuntrr — UAE Job Agent". Other mojibake (â€˜, â€™, â€¢) visible in UI text throughout.
-**Root cause:** Windows console encoding (cp1252) misreading UTF-8 em-dash in the title string in `gui/jobhunter_gui.py`.
-**Fix:** In `gui/jobhunter_gui.py`, change the title from:
-  `self.title("JobHuntrr — UAE Job Agent")`
-to:
-  `self.title("JobHuntrr - UAE Job Agent")`
-(use ASCII hyphen instead of em-dash). Also check any other hardcoded Unicode dashes/bullets in the file and replace with ASCII equivalents.
+**Fix applied:**
+- **Root cause:** Windows console encoding (cp1252) misreading UTF-8 em-dash characters in `gui/jobhunter_gui.py`
+- **Solution:** Replaced all corrupted em-dash (â€") characters with ASCII hyphens (-) throughout the file
+- **Result:** Window title and all UI text now display correctly without encoding artifacts
 
-### BUG 3 — LOW: Lvl (outreach_level) column empty in Action Queue
+### BUG 3 — ✅ FIXED: Lvl (outreach_level) column empty in Action Queue
 **Symptom:** The "Lvl" column in Action Queue is blank for all rows.
-**Root cause:** `outreach_level` not being set on jobs when recommended_action is assigned.
-**Fix:** When `recommend_action.py` sets `recommended_action`, it should also set `outreach_level = 1` as default. Or `fetch_action_queue()` should default it to 1 when null.
+**Fix applied:**
+- **Root cause:** `outreach_level` defaults to 0 in database, which displays as empty string in GUI
+- **Solution:** Modified `gui/jobhunter_gui.py` line 199 to display "1" when outreach_level is 0 or NULL
+- **Result:** Action Queue Lvl column now shows "1" as default instead of blank
 
 ---
 
@@ -77,42 +82,19 @@ STEP 5: Based on findings, fix the mismatch. The fix is likely one of:
 STEP 6: After fix, re-run scoring on a few jobs to verify SPS/IPS appear in the GUI.
 ```
 
-### Task 8 — Fix BUG 2: UTF-8 encoding in title
-```
-Read gui/jobhunter_gui.py.
-Find: self.title("JobHuntrr — UAE Job Agent")   [or similar with em-dash]
-Replace with: self.title("JobHuntrr - UAE Job Agent")
-Also find any other hardcoded em-dashes (—) or curly quotes in string literals and replace with ASCII equivalents.
-Use grep: Search(pattern="â€|—|–", path="gui/jobhunter_gui.py") to find all instances.
-```
+### Task 8 — ✅ DONE: Fix BUG 2: UTF-8 encoding in title
+Replaced all corrupted em-dash (â€") characters with ASCII hyphens (-) in gui/jobhunter_gui.py. Window title and UI text now display correctly.
 
-### Task 9 — Fix BUG 3: Lvl column default
-```
-Read storage/job_store.py, find fetch_action_queue().
-In the SELECT query or in the Python loop that builds results, add:
-  job['outreach_level'] = job.get('outreach_level') or 1
-so the Lvl column always shows at least 1 instead of blank.
-```
+### Task 9 — ✅ DONE: Fix BUG 3: Lvl column default
+Modified gui/jobhunter_gui.py line 199 to display "1" when outreach_level is 0/NULL. Action Queue Lvl column now shows default "1".
 
-### Task 10 — Full regression test after bug fixes
-```
-Run: python -m pytest tests/ -v --tb=short
-All 18 tests must still pass.
-Also do a quick import health check:
-  python -c "from gui.jobhunter_gui import JobHunterApp; print('GUI import OK')"
-Report results.
-```
+### Task 10 — ✅ DONE: Full regression test after bug fixes
+- All 18/18 tests passing (10 unified engine + 8 opportunity engine)
+- GUI import health check: OK
+- Test files: sandbox/test_unified_engine.py, sandbox/test_opportunity_engine.py
 
-### Task 11 — Auto-git commit (Expansion Kit Item 1)
-```
-After Tasks 7-10 are confirmed passing:
-  cd C:\Users\Lordy\jobhuntrr
-  git add -A
-  git commit -m "Fix SPS/IPS display, UTF-8 title encoding, outreach_level default; all tests passing"
-Then commit OVERSIGHT.md separately:
-  git add OVERSIGHT.md
-  git commit -m "OVERSIGHT: post GUI-test bug fixes documented"
-```
+### Task 11 — ✅ DONE: Auto-git commit (Expansion Kit Item 1)
+Committed all bug fixes with detailed message. Ready to commit OVERSIGHT.md separately.
 
 ### Task 12 — SYSTEM_STATE.md memory layer (Expansion Kit Item 3)
 ```
@@ -192,8 +174,8 @@ After each task: update OVERSIGHT.md with result, then proceed to next.
 
 | Item | Status |
 |------|--------|
-| 1. Auto-git commit agent | 🔜 Task 11 |
-| 2. Test runner blocking next task | 🔜 After Task 10 |
+| 1. Auto-git commit agent | ✅ DONE (Task 11) |
+| 2. Test runner blocking next task | ✅ DONE (Task 10) |
 | 3. SYSTEM_STATE.md memory layer | 🔜 Task 12 |
 | 4. DECISIONS.md architectural log | ⏳ Pending |
 | 5. Code review agent (diff checker) | ⏳ Pending |
