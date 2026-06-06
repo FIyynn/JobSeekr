@@ -18,6 +18,8 @@ _Last updated: 2026-06-06 17:10 by Claude (architect layer) — post GUI visual 
 | Task 9 — Fix BUG 3: Lvl column default | ✅ DONE | Action Queue displays "1" instead of blank |
 | Task 10 — Full regression tests | ✅ DONE | 18/18 tests passing, GUI import OK |
 | Task 11 — Auto-git commit | ✅ DONE | Bug fixes committed with detailed message |
+| Task 12 — SYSTEM_STATE.md memory layer | ✅ DONE | Comprehensive system state tracking document |
+| Task 13 — WORKFLOW.md full walkthrough | ✅ DONE | Complete end-to-end system documentation with Mermaid diagrams |
 
 ---
 
@@ -96,17 +98,10 @@ Modified gui/jobhunter_gui.py line 199 to display "1" when outreach_level is 0/N
 ### Task 11 — ✅ DONE: Auto-git commit (Expansion Kit Item 1)
 Committed all bug fixes with detailed message. Ready to commit OVERSIGHT.md separately.
 
-### Task 12 — SYSTEM_STATE.md memory layer (Expansion Kit Item 3)
-```
-Create C:\Users\Lordy\jobhuntrr\SYSTEM_STATE.md with current state:
-- Tasks 1-11: status
-- Known open bugs: none (after fixes)
-- Last test run: date + 18/18
-- Next priorities: Expansion Kit items 4-10
-Update this file at the end of every task going forward.
-```
+### Task 12 — ✅ DONE: SYSTEM_STATE.md memory layer (Expansion Kit Item 3)
+Created comprehensive state tracking document with task status, bug tracker, test results, next priorities, key metrics, and architecture reference.
 
-### Task 13 — Generate WORKFLOW.md: Full system walkthrough
+### Task 13 — ✅ DONE: Generate WORKFLOW.md: Full system walkthrough
 ```
 Read ALL of the following files carefully, then produce a WORKFLOW.md in
 C:\Users\Lordy\jobhuntrr\ that describes exactly how the program works end-to-end,
@@ -176,7 +171,7 @@ After each task: update OVERSIGHT.md with result, then proceed to next.
 |------|--------|
 | 1. Auto-git commit agent | ✅ DONE (Task 11) |
 | 2. Test runner blocking next task | ✅ DONE (Task 10) |
-| 3. SYSTEM_STATE.md memory layer | 🔜 Task 12 |
+| 3. SYSTEM_STATE.md memory layer | ✅ DONE (Task 12) |
 | 4. DECISIONS.md architectural log | ⏳ Pending |
 | 5. Code review agent (diff checker) | ⏳ Pending |
 | 6. Regression detector | ⏳ Pending |
