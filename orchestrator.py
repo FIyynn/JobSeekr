@@ -188,35 +188,10 @@ def _prompt_linkedin_credentials() -> tuple[str, str]:
 APPLICATION_QA["email"] = APPLICANT_EMAIL
 APPLICATION_QA["phone"] = APPLICANT_PHONE
 
-# ── Tailored resume paths ──────────────────────────────────────────────────────
-_BASE = Path(__file__).parent
-RESUME_BY_ANGLE = {
-    "quant":       str(_BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "investments": str(_BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "pe":          str(_BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "finance":     str(_BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "trading":     str(_BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "commodities": str(_BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "energy":      str(_BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "ai":          str(_BASE / "resumes" / "Resume_Rashed_AI_DataScience.pdf"),
-    "data":        str(_BASE / "resumes" / "Resume_Rashed_AI_DataScience.pdf"),
-    "ml":          str(_BASE / "resumes" / "Resume_Rashed_AI_DataScience.pdf"),
-    "research":    str(_BASE / "resumes" / "Resume_Rashed_AI_DataScience.pdf"),
-    "space":       str(_BASE / "resumes" / "Resume_Rashed_AI_DataScience.pdf"),
-    "defense":     str(_BASE / "resumes" / "Resume_Rashed_AI_DataScience.pdf"),
-    "cyber":       str(_BASE / "resumes" / "Resume_Rashed_Tech_Startup.pdf"),
-    "fintech":     str(_BASE / "resumes" / "Resume_Rashed_Tech_Startup.pdf"),
-    "startup":     str(_BASE / "resumes" / "Resume_Rashed_Tech_Startup.pdf"),
-    "strategy":    str(_BASE / "resumes" / "Resume_Rashed_Tech_Startup.pdf"),
-    "climate":     str(_BASE / "resumes" / "Resume_Rashed_Tech_Startup.pdf"),
-}
-_DEFAULT_RESUME = str(_BASE / "Rashed_Alneyadi_Resume.pdf")
-
 def _pick_resume(angle: str) -> str:
-    """Return the tailored resume path for a given positioning angle."""
-    key = (angle or "").lower().split("/")[0].strip()
-    path = RESUME_BY_ANGLE.get(key, _DEFAULT_RESUME)
-    return path if Path(path).exists() else _DEFAULT_RESUME
+    """Return resume path for positioning angle (centralized in apply_agent_rules)."""
+    from config.apply_agent_rules import pick_resume_by_angle
+    return pick_resume_by_angle(angle)
 
 # URL dedup across runs (persisted to disk)
 SEEN_URLS_FILE = Path("data/seen_urls.json")
@@ -240,12 +215,23 @@ def _merge_apply_queue(new_jobs: list[dict], *, gcc_only: bool = False) -> list[
     """Combine newly scored jobs with the persisted retry queue without duplicates."""
     from agents.unified_engine import enrich_job_with_engine, job_eligible_for_auto_apply
 
+    try:
+        from storage.opportunity_store import get_opportunity_store
+        opp_store = get_opportunity_store()
+    except Exception:
+        opp_store = None
+
     queued = fetch_pending_apply(gcc_only=gcc_only)
     merged: list[dict] = []
     seen: set[str] = set()
     deferred = 0
     for job in [*new_jobs, *queued]:
-        enrich_job_with_engine(job)
+        contact = None
+        if opp_store and job.get("opportunity_id"):
+            contacts = opp_store.list_contacts(job["opportunity_id"])
+            if contacts:
+                contact = contacts[0]
+        enrich_job_with_engine(job, contact)
         if not job_eligible_for_auto_apply(job):
             if job.get("decision") == "auto_apply":
                 deferred += 1
@@ -294,6 +280,11 @@ def _apply_queued_jobs(
 
     logger.info(f"  {len(jobs)} job(s) queued | mode: {'DRY RUN' if dry_run else 'LIVE'}")
     for job in jobs:
+        try:
+            from engine.resume_optimizer import attach_resume_optimization
+            attach_resume_optimization(job)
+        except Exception:
+            pass
         angle = job.get("positioning_angle", "investments")
         job["_resume_path"] = _pick_resume(angle)
         job["job_id"] = job.get("job_id") or job.get("id")
@@ -466,6 +457,20 @@ def run_pipeline(
     except Exception as e:
         logger.warning(f"Web signal discovery skipped: {e}")
 
+    # ── 2d. Hidden market signals (Track B) ─────────────────────────────────
+    if _env_flag("HIDDEN_MARKET_ENABLED", default=True):
+        try:
+            from engine.pipeline import run_unified_cycle
+            hidden_stats = run_unified_cycle()
+            logger.info(
+                "  Hidden market: %d signal(s), %d opportunity row(s), %d outreach push(es)",
+                hidden_stats.get("signals_found", 0),
+                hidden_stats.get("opportunities_upserted", 0),
+                hidden_stats.get("outreach_pushed", 0),
+            )
+        except Exception as e:
+            logger.warning(f"Hidden market discovery skipped: {e}")
+
     _save_seen_urls(persisted_seen_urls | seen_urls)
 
     if jobs:
@@ -521,6 +526,18 @@ def run_pipeline(
 
     def _persist_scored_job(scored_job: dict) -> None:
         """Expose each fresh decision in Jobs while the remaining rows are scored."""
+        try:
+            sps = scored_job.get("sps") or 0
+            if sps >= 70 and not scored_job.get("warm_lead_score"):
+                from engine.stakeholder_mapper import resolve_power_trio
+                from engine.warm_lead import best_contact_for_job
+                trio = resolve_power_trio(scored_job, profile=candidate_profile)
+                best = best_contact_for_job(trio, candidate_profile)
+                if best:
+                    from agents.unified_engine import enrich_job_with_engine
+                    scored_job = enrich_job_with_engine(scored_job, best)
+        except Exception:
+            pass
         get_store().log_jobs_batch([scored_job], update_existing=True)
         if progress_callback:
             progress_callback()
@@ -533,6 +550,20 @@ def run_pipeline(
         score_thresholds=SCORE_THRESHOLDS,
         progress_callback=_persist_scored_job,
     )
+
+    try:
+        from engine.pipeline import sync_jobs_to_opportunities
+        synced = sync_jobs_to_opportunities(jobs)
+        logger.info(f"  Opportunity store synced: {synced} row(s)")
+    except Exception as e:
+        logger.debug(f"Opportunity sync skipped: {e}")
+
+    apply_now_n = sum(1 for j in jobs if j.get("recommended_action") == "apply_now")
+    network_n = sum(
+        1 for j in jobs
+        if j.get("recommended_action") in ("network_only", "referral_first")
+    )
+    logger.info(f"  Recommended: apply_now={apply_now_n} | network/referral={network_n}")
 
     # Bucketize
     auto_apply_jobs   = [j for j in jobs if j["decision"] == "auto_apply"]

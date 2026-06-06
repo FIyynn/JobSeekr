@@ -158,10 +158,24 @@ class JobStore:
             "apply_mode": "TEXT DEFAULT ''",
             "engine_action": "TEXT DEFAULT ''",
             "engine_json": "TEXT DEFAULT ''",
+            "recommended_action": "TEXT DEFAULT ''",
+            "opportunity_id": "TEXT DEFAULT ''",
+            "referral_status": "TEXT DEFAULT 'none'",
+            "track": "TEXT DEFAULT 'visible'",
+            "outreach_level": "INTEGER DEFAULT 0",
         }
         for col, typedef in new_cols.items():
             if col not in existing:
                 conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {typedef}")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_recommended_action ON jobs(recommended_action)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_sps ON jobs(sps DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_track ON jobs(track)"
+        )
         if "notion_page_id" not in existing:
             conn.execute(
                 "ALTER TABLE jobs ADD COLUMN notion_page_id TEXT DEFAULT ''"
@@ -327,6 +341,11 @@ class JobStore:
             "apply_mode": d.get("apply_mode") or "",
             "engine_action": d.get("engine_action") or "",
             "engine_json": d.get("engine_json") or "",
+            "recommended_action": d.get("recommended_action") or "",
+            "opportunity_id": d.get("opportunity_id") or "",
+            "referral_status": d.get("referral_status") or "none",
+            "track": d.get("track") or "visible",
+            "outreach_level": int(d.get("outreach_level") or 0),
             "created_at": d["created_at"] or "",
             "updated_at": d["updated_at"] or "",
         }
@@ -397,6 +416,11 @@ class JobStore:
             "apply_mode": job.get("apply_mode") or "",
             "engine_action": job.get("engine_action") or "",
             "engine_json": (job.get("engine_json") or "")[:16000],
+            "recommended_action": job.get("recommended_action") or "",
+            "opportunity_id": job.get("opportunity_id") or "",
+            "referral_status": job.get("referral_status") or "none",
+            "track": job.get("track") or "visible",
+            "outreach_level": int(job.get("outreach_level") or 0),
             "updated_at": now,
         }
         if fields["applied"] and fields["submission_status"] not in (
@@ -592,6 +616,8 @@ class JobStore:
             "confirmation_checks", "last_confirmation_check_at",
             "apply_attempts", "last_apply_attempt_at",
             "sps", "ips", "apply_mode", "engine_action", "engine_json",
+            "recommended_action", "opportunity_id", "referral_status",
+            "track", "outreach_level",
         }
         updates = {k: v for k, v in fields.items() if k in allowed}
         if updates.get("applied"):
@@ -655,6 +681,47 @@ class JobStore:
             last_apply_attempt_at=last_apply_attempt_at,
         )
 
+    def fetch_action_queue(
+        self,
+        gcc_only: bool = False,
+        limit: int = 200,
+        exclude_ignore: bool = True,
+    ) -> list[dict]:
+        """Jobs sorted by SPS with recommended_action for the Action Queue tab."""
+        clauses = ["decision <> 'closed'"]
+        if exclude_ignore:
+            clauses.append(
+                "(recommended_action IS NULL OR recommended_action = '' "
+                "OR recommended_action NOT IN ('ignore'))"
+            )
+        sql = f"""
+            SELECT * FROM jobs
+            WHERE {' AND '.join(clauses)}
+            ORDER BY COALESCE(sps, 0) DESC, score DESC, discovered_at DESC
+            LIMIT ?
+        """
+        with self._connect() as conn:
+            rows = [self._row_to_job(r) for r in conn.execute(sql, (limit,))]
+        if gcc_only:
+            rows = [j for j in rows if self._is_gcc(j.get("location", ""))]
+        return rows
+
+    def fetch_referral_blocked(self, limit: int = 100) -> list[dict]:
+        """Referral-first rows waiting on referral outcome."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM jobs
+                WHERE recommended_action = 'referral_first'
+                  AND referral_status = 'requested'
+                  AND applied = 0
+                ORDER BY sps DESC NULLS LAST
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._row_to_job(r) for r in rows]
+
     def delete_job(self, job_id: int) -> bool:
         """Permanently delete a job by id. Returns True on success."""
         with self._connect() as conn:
@@ -697,3 +764,7 @@ class JobStore:
     def _is_gcc(location: str) -> bool:
         loc = (location or "").lower()
         return any(kw in loc for kw in GCC_LOCATION_KEYWORDS)
+
+
+def get_store(db_path: Path = None) -> JobStore:
+    return JobStore(db_path)

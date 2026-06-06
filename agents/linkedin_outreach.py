@@ -36,58 +36,37 @@ OUTREACH_STATUSES = [
     "Accepted",
     "Follow-up sent",
     "Replied",
+    "Referral requested",
     "Referred",
     "Applied",
     "Rejected",
     "No response",
+    "Waterfall level 4 exhausted",
     "Archive",
-]
-
-DEFAULT_COMPANIES = [
-    "Lunate",
-    "ADQ",
-    "EIA",
-    "ADIO",
-    "G42",
-    "Core42",
-    "Presight",
-    "AIQ",
-    "Inception",
-    "M42",
-    "Space42",
-    "Technology Innovation Institute",
-    "ASPIRE",
-    "EDGE Group",
-    "HALCON",
-    "Bayanat",
-    "Yahsat",
-    "Thuraya",
-    "MBRSC",
-    "UAE Space Agency",
-    "Brevan Howard",
-    "Millennium",
-    "Point72",
-    "Squarepoint",
-    "Balyasny",
-    "Verition",
-    "Schonfeld",
-    "ExodusPoint",
-    "Citadel",
-    "Jane Street",
-    "Optiver",
-    "IMC",
-    "DRW",
-    "QIA",
-    "Qatar Development Bank",
-    "Invest Qatar",
-    "Qatar Foundation",
-    "QNB",
 ]
 
 EXCLUDED_DEFAULT_TARGETS = {"adia", "adic", "mubadala"}
 
+
+def _registry_company_names() -> list[str]:
+    """Target companies from employer registry (no hardcoded list)."""
+    names = []
+    try:
+        registry = _load_registry()
+        for item in registry.values():
+            name = (item.get("name") or "").strip()
+            if name and name.lower() not in EXCLUDED_DEFAULT_TARGETS:
+                names.append(name)
+    except Exception:
+        pass
+    return names
+
+
 FIELDNAMES = [
     "id",
+    "opportunity_id",
+    "Waterfall level",
+    "IPS score",
     "Company",
     "Company category",
     "Company priority score",
@@ -145,7 +124,7 @@ def _now_iso() -> str:
 
 def parse_companies(text: str) -> list[str]:
     """Parse newline/comma separated companies, excluding ADIA/ADIC/Mubadala by default."""
-    raw = text or "\n".join(DEFAULT_COMPANIES)
+    raw = text or default_companies_text()
     parts = []
     for line in raw.replace(",", "\n").splitlines():
         company = line.strip(" -*\t")
@@ -159,7 +138,7 @@ def parse_companies(text: str) -> list[str]:
 
 
 def default_companies_text() -> str:
-    return "\n".join(DEFAULT_COMPANIES)
+    return "\n".join(generate_relevant_companies(limit=40))
 
 
 def generate_relevant_companies(*, limit: int = 30, run_focus: str = "") -> list[str]:
@@ -187,9 +166,9 @@ def generate_relevant_companies(*, limit: int = 30, run_focus: str = "") -> list
             score += 2
         add(name, score)
 
-    for name in DEFAULT_COMPANIES:
+    for name in _registry_company_names():
         category = _company_category(name)
-        add(name, _company_priority(name, category))
+        add(name, _company_priority(name, category) + 2)
 
     try:
         from storage.job_store import JobStore
@@ -232,13 +211,57 @@ def generate_relevant_companies(*, limit: int = 30, run_focus: str = "") -> list
 
 
 def load_rows() -> list[dict]:
-    if not OUTREACH_PATH.exists():
-        return []
+    """Load outreach rows from both legacy JSON and opportunity store."""
+    legacy_rows = []
+    if OUTREACH_PATH.exists():
+        try:
+            data = json.loads(OUTREACH_PATH.read_text(encoding="utf-8"))
+            legacy_rows = data if isinstance(data, list) else []
+        except Exception:
+            pass
+
+    # Merge with opportunity store attempts
+    existing_urls: set[str] = set()
+    for legacy_row in legacy_rows:
+        for key in ("LinkedIn URL", "LinkedIn profile URL"):
+            url = _clean_linkedin_profile_url(str(legacy_row.get(key) or ""))
+            if url:
+                existing_urls.add(url.lower())
+
     try:
-        data = json.loads(OUTREACH_PATH.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+        from storage.opportunity_store import get_opportunity_store
+
+        store = get_opportunity_store()
+        attempts = store.fetch_all_outreach_attempts(limit=500)
+
+        for att in attempts:
+            linkedin_url = _clean_linkedin_profile_url(str(att.get("linkedin_url") or ""))
+            if linkedin_url and linkedin_url.lower() in existing_urls:
+                continue
+
+            row = {
+                "id": att.get("id") or str(uuid.uuid4()),
+                "opportunity_id": att.get("opportunity_id") or "",
+                "Waterfall level": att.get("level") or 1,
+                "IPS": att.get("ips") or "",
+                "Company": att.get("company") or "",
+                "Person name": att.get("contact_name") or "",
+                "Person title": att.get("contact_title") or "",
+                "LinkedIn profile URL": linkedin_url,
+                "Suggested message": att.get("draft_message") or "",
+                "Person priority score": att.get("sps") or "",
+                "Outreach status": (
+                    "Not sent" if att.get("status") == "draft_ready" else "Pending"
+                ),
+                "Notes": att.get("notes") or "",
+            }
+            legacy_rows.append(row)
+            if linkedin_url:
+                existing_urls.add(linkedin_url.lower())
+    except Exception as exc:
+        logger.debug("Failed to load opportunity store attempts: %s", exc)
+
+    return legacy_rows
 
 
 def save_rows(rows: list[dict]) -> None:
@@ -269,6 +292,7 @@ def merge_rows(new_rows: list[dict]) -> list[dict]:
                 "Date followed up": old.get("Date followed up") or "",
                 "Reply status": old.get("Reply status") or "",
                 "Notes": old.get("Notes") or "",
+                "opportunity_id": old.get("opportunity_id") or row.get("opportunity_id") or "",
             }
             old.update(row)
             old.update(keep)
@@ -636,7 +660,7 @@ def _infer_company_from_profile_text(text: str, title: str) -> str:
         idx = (text or "").find(marker)
         if idx >= 0:
             chunk = _normalize_space((text or "")[idx:idx + 200])
-            for company in DEFAULT_COMPANIES:
+            for company in _registry_company_names():
                 if company.lower() in chunk.lower():
                     return company
     return ""

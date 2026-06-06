@@ -412,10 +412,16 @@ STRUCTURED JOB PROFILE:
     return _enrich_with_unified_engine(_hold_employee_post_for_review(job))
 
 
-def _enrich_with_unified_engine(job: dict) -> dict:
+def _enrich_with_unified_engine(job: dict, contact: dict = None) -> dict:
     try:
         from agents.unified_engine import enrich_job_with_engine
-        return enrich_job_with_engine(job)
+        job = enrich_job_with_engine(job, contact)
+        try:
+            from storage.opportunity_store import get_opportunity_store
+            get_opportunity_store().upsert_from_job(job)
+        except Exception as store_exc:
+            logger.debug("Opportunity upsert skipped: %s", store_exc)
+        return job
     except Exception as exc:
         logger.debug("Unified engine enrich skipped: %s", exc)
         return job

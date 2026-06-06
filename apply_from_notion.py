@@ -46,32 +46,12 @@ from agents.job_fit import prefilter_job
 APPLICATION_QA["email"] = os.getenv("APPLICANT_EMAIL", APPLICATION_QA.get("email",""))
 APPLICATION_QA["phone"] = os.getenv("APPLICANT_PHONE", APPLICATION_QA.get("phone",""))
 
-BASE = Path(__file__).parent
-RESUME_BY_ANGLE = {
-    "quant":       str(BASE/"resumes"/"Resume_Rashed_Quant_Investment.pdf"),
-    "investments": str(BASE/"resumes"/"Resume_Rashed_Quant_Investment.pdf"),
-    "pe":          str(BASE/"resumes"/"Resume_Rashed_Quant_Investment.pdf"),
-    "finance":     str(BASE/"resumes"/"Resume_Rashed_Quant_Investment.pdf"),
-    "trading":     str(BASE/"resumes"/"Resume_Rashed_Quant_Investment.pdf"),
-    "energy":      str(BASE/"resumes"/"Resume_Rashed_Quant_Investment.pdf"),
-    "ai":          str(BASE/"resumes"/"Resume_Rashed_AI_DataScience.pdf"),
-    "data":        str(BASE/"resumes"/"Resume_Rashed_AI_DataScience.pdf"),
-    "ml":          str(BASE/"resumes"/"Resume_Rashed_AI_DataScience.pdf"),
-    "research":    str(BASE/"resumes"/"Resume_Rashed_AI_DataScience.pdf"),
-    "space":       str(BASE/"resumes"/"Resume_Rashed_AI_DataScience.pdf"),
-    "defense":     str(BASE/"resumes"/"Resume_Rashed_AI_DataScience.pdf"),
-    "cyber":       str(BASE/"resumes"/"Resume_Rashed_Tech_Startup.pdf"),
-    "fintech":     str(BASE/"resumes"/"Resume_Rashed_Tech_Startup.pdf"),
-    "startup":     str(BASE/"resumes"/"Resume_Rashed_Tech_Startup.pdf"),
-    "strategy":    str(BASE/"resumes"/"Resume_Rashed_Tech_Startup.pdf"),
-    "climate":     str(BASE/"resumes"/"Resume_Rashed_Tech_Startup.pdf"),
-}
-DEFAULT_RESUME = str(BASE / "Rashed_Alneyadi_Resume.pdf")
-
 def _pick_resume(angle: str) -> str:
-    key = (angle or "").lower().split("/")[0].strip()
-    path = RESUME_BY_ANGLE.get(key, DEFAULT_RESUME)
-    return path if Path(path).exists() else DEFAULT_RESUME
+    from config.apply_agent_rules import get_resume_path, pick_resume_by_angle
+    path = get_resume_path()
+    if path and Path(path).exists():
+        return path
+    return pick_resume_by_angle(angle)
 
 HEADERS = {
     "Authorization": f"Bearer {NOTION_TOKEN}",

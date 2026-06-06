@@ -1,5 +1,5 @@
 """
-JobHuntrr â€” full local GUI: jobs tracker, profile/requirements builder, all CLI actions.
+JobHuntrr - full local GUI: jobs tracker, profile/requirements builder, all CLI actions.
 
   python gui/jobhunter_gui.py
 """
@@ -27,7 +27,7 @@ if _GUI_DIR not in sys.path:
 from config.env_settings import bootstrap_settings
 bootstrap_settings()
 
-# Cooperative stop flag (shared with pipeline loops) â€” imported after path setup
+# Cooperative stop flag (shared with pipeline loops) - imported after path setup
 from gui import stop_flag as _stop_flag
 
 from storage.job_store import JobStore, DECISION_DISPLAY, GCC_LOCATION_KEYWORDS
@@ -62,13 +62,13 @@ def _apply_method_display(job: dict) -> str:
     """Return a short, human-readable apply method string for the table."""
     from agents.apply_method import resolve_apply_method
     resolved = resolve_apply_method(job)
-    return resolved or "â€”"
+    return resolved or "-"
 
 
 class JobHunterApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("JobHuntrr â€” UAE Job Agent")
+        self.title("JobHuntrr - UAE Job Agent")
         self.geometry("1280x820")
         self.minsize(1000, 600)
         self.store = JobStore()
@@ -95,12 +95,14 @@ class JobHunterApp(tk.Tk):
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
         self.jobs_tab = ttk.Frame(self.notebook)
+        self.action_queue_tab = ttk.Frame(self.notebook)
         self.console_tab = ttk.Frame(self.notebook)
         self.linkedin_dm_tab = ttk.Frame(self.notebook)
         self.chat_tab = ttk.Frame(self.notebook)
         self.profile_tab = ttk.Frame(self.notebook)
         self.req_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.jobs_tab, text="Jobs")
+        self.notebook.add(self.action_queue_tab, text="Action Queue")
         self.notebook.add(self.console_tab, text="Console")
         self.notebook.add(self.linkedin_dm_tab, text="LinkedIn DM")
         self.notebook.add(self.chat_tab, text="Chat")
@@ -111,6 +113,7 @@ class JobHunterApp(tk.Tk):
         self._chat_busy = False
 
         self._build_jobs_tab()
+        self._build_action_queue_tab()
         self._build_console_tab()
         self._build_linkedin_dm_tab()
         self._build_chat_tab()
@@ -122,7 +125,147 @@ class JobHunterApp(tk.Tk):
         )
         self.log.pack(fill=tk.X, padx=8, pady=(0, 8))
 
-    # â”€â”€ Jobs tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Action Queue tab -----------------------------------------------
+
+    def _build_action_queue_tab(self):
+        top = ttk.Frame(self.action_queue_tab, padding=6)
+        top.pack(fill=tk.X)
+
+        self.aq_gcc_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            top, text="GCC only", variable=self.aq_gcc_var,
+            command=self.refresh_action_queue,
+        ).pack(side=tk.LEFT, padx=4)
+
+        ttk.Button(top, text="Refresh", command=self.refresh_action_queue).pack(side=tk.LEFT, padx=4)
+        ttk.Button(top, text="Queue outreach (selected)", command=self._aq_queue_outreach).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(top, text="Override → Apply now", command=self._aq_override_apply).pack(
+            side=tk.LEFT, padx=4
+        )
+        ttk.Button(top, text="Skip selected", command=self._aq_skip_selected).pack(side=tk.LEFT, padx=4)
+
+        self.aq_stats_label = ttk.Label(top, text="")
+        self.aq_stats_label.pack(side=tk.RIGHT, padx=8)
+
+        table_frame = ttk.Frame(self.action_queue_tab)
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+
+        aq_cols = (
+            "sps", "ips", "action", "track", "level", "referral", "company", "title", "decision",
+        )
+        self.aq_tree = ttk.Treeview(
+            table_frame, columns=aq_cols, show="headings", selectmode="extended",
+        )
+        aq_spec = {
+            "sps": ("SPS", 44),
+            "ips": ("IPS", 44),
+            "action": ("Action", 100),
+            "track": ("Track", 56),
+            "level": ("Lvl", 36),
+            "referral": ("Referral", 72),
+            "company": ("Company", 120),
+            "title": ("Role", 200),
+            "decision": ("Decision", 88),
+        }
+        for c, (label, w) in aq_spec.items():
+            self.aq_tree.heading(c, text=label)
+            anchor = tk.W if c in ("company", "title") else tk.CENTER
+            self.aq_tree.column(c, width=w, anchor=anchor)
+
+        vsb = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.aq_tree.yview)
+        self.aq_tree.configure(yscrollcommand=vsb.set)
+        self.aq_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self._action_queue_jobs: list[dict] = []
+        self.refresh_action_queue()
+
+    def refresh_action_queue(self):
+        gcc = self.aq_gcc_var.get()
+        self._action_queue_jobs = self.store.fetch_action_queue(gcc_only=gcc, limit=300)
+        for i in self.aq_tree.get_children():
+            self.aq_tree.delete(i)
+        for job in self._action_queue_jobs:
+            iid = str(job["id"])
+            self.aq_tree.insert(
+                "", tk.END, iid=iid,
+                values=(
+                    job.get("sps") or "",
+                    job.get("ips") or "",
+                    (job.get("recommended_action") or "")[:16],
+                    (job.get("track") or "visible")[:8],
+                    job.get("outreach_level") or 1,
+                    (job.get("referral_status") or "none")[:10],
+                    (job.get("company") or "")[:40],
+                    (job.get("title") or "")[:56],
+                    job.get("decision_display") or job.get("decision") or "",
+                ),
+            )
+        self.aq_stats_label.config(text=f"Showing {len(self._action_queue_jobs)} opportunities")
+
+    def _aq_selected_jobs(self) -> list[dict]:
+        sel = self.aq_tree.selection()
+        by_id = {str(j["id"]): j for j in self._action_queue_jobs}
+        return [by_id[iid] for iid in sel if iid in by_id]
+
+    def _aq_queue_outreach(self):
+        from engine.waterfall_runner import queue_outreach_for_job
+        from config.applicant_requirements import PROFILE_FULL
+
+        sel = self.aq_tree.selection()
+        if not sel:
+            messagebox.showinfo("Action Queue", "Select one or more rows.")
+            return
+        by_id = {str(j["id"]): j for j in self._action_queue_jobs}
+        queued = 0
+        for iid in sel:
+            job = by_id.get(iid)
+            if not job:
+                continue
+            queue_outreach_for_job(job, profile=PROFILE_FULL)
+            queued += 1
+        messagebox.showinfo(
+            "Action Queue",
+            f"Queued {queued} outreach attempts. Check LinkedIn DM tab.",
+        )
+
+    def _aq_override_apply(self):
+        jobs = self._aq_selected_jobs()
+        if not jobs:
+            messagebox.showinfo("Action Queue", "Select one or more rows.")
+            return
+        for job in jobs:
+            if job.get("id"):
+                self.store.update_job(
+                    job["id"],
+                    recommended_action="apply_now",
+                    referral_status="timeout",
+                    decision="auto_apply",
+                    decision_display="Auto Apply",
+                )
+        messagebox.showinfo("Action Queue", f"Override → apply now for {len(jobs)} job(s).")
+        self.refresh_action_queue()
+        self.refresh_table()
+
+    def _aq_skip_selected(self):
+        jobs = self._aq_selected_jobs()
+        if not jobs:
+            messagebox.showinfo("Action Queue", "Select one or more rows.")
+            return
+        for job in jobs:
+            if job.get("id"):
+                self.store.update_job(
+                    job["id"],
+                    recommended_action="ignore",
+                    decision="skip",
+                    decision_display="Skipped",
+                )
+        self.refresh_action_queue()
+        self.refresh_table()
+
+    # -- Jobs tab -------------------------------------------------------------
 
     def _build_jobs_tab(self):
         top = ttk.Frame(self.jobs_tab, padding=6)
@@ -238,7 +381,7 @@ class JobHunterApp(tk.Tk):
         paned.add(table_frame, weight=3)
 
         cols = (
-            "score", "sps", "ips", "mode", "decision", "alt", "salary", "off_target",
+            "score", "sps", "ips", "action", "mode", "decision", "alt", "salary", "off_target",
             "company", "title", "location", "angle", "source", "method", "applied",
             "discovered",
         )
@@ -247,6 +390,7 @@ class JobHunterApp(tk.Tk):
             "score": ("Score", 44),
             "sps": ("SPS", 40),
             "ips": ("IPS", 40),
+            "action": ("Action", 88),
             "mode": ("Mode", 72),
             "decision": ("Decision", 88),
             "alt": ("Alt?", 40),
@@ -279,14 +423,14 @@ class JobHunterApp(tk.Tk):
         detail_frame = ttk.LabelFrame(paned, text="Job details", padding=6)
         paned.add(detail_frame, weight=2)
 
-        # â”€â”€ Bulk action bar (always visible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Bulk action bar (always visible) ---------------------------------
         bulk_bar = ttk.Frame(detail_frame)
         bulk_bar.pack(fill=tk.X, pady=(0, 4))
 
         ttk.Label(bulk_bar, text="Bulk action on selected:").pack(side=tk.LEFT, padx=(0, 4))
-        self._bulk_action_var = tk.StringVar(value="â€” choose â€”")
+        self._bulk_action_var = tk.StringVar(value="- choose -")
         _bulk_choices = [
-            "â€” choose â€”",
+            "- choose -",
             "Mark applied",
             "Set: Auto Apply",
             "Set: Manual Review",
@@ -333,14 +477,14 @@ class JobHunterApp(tk.Tk):
             ("Check profile gaps", self.check_gaps_for_job),
         ]:
             ttk.Button(act, text=text, command=cmd).pack(side=tk.LEFT, padx=3)
-        # Delete â€” red, right-aligned
+        # Delete - red, right-aligned
         tk.Button(
             act, text="Delete job", command=self.delete_job,
             bg="#c0392b", fg="white", activebackground="#922b21",
             activeforeground="white", relief=tk.FLAT, padx=8,
         ).pack(side=tk.RIGHT, padx=3)
 
-    # â”€â”€ Signals tab (Hidden Opportunity Discovery) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Signals tab (Hidden Opportunity Discovery) ---------------------------
 
     def _build_signals_tab(self, parent=None):
         from agents.hidden_opportunity_discovery import SIGNAL_STATUSES
@@ -349,13 +493,13 @@ class JobHunterApp(tk.Tk):
         outer.pack(fill=tk.BOTH, expand=True)
 
         info = (
-            "Hidden Opportunity Discovery â€” finds hiring signals in LinkedIn posts before they become job listings. "
+            "Hidden Opportunity Discovery - finds hiring signals in LinkedIn posts before they become job listings. "
             "Uses DuckDuckGo (free, no API key). Searches for 'DM me', 'send your CV', 'happy to refer', "
             "Emiratization campaigns, team expansions, and more."
         )
         ttk.Label(outer, text=info, wraplength=1100, foreground="#1a7f37").pack(anchor=tk.W, pady=(0, 4))
 
-        # â”€â”€ Top controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Top controls ------------------------------------------------------
         ctrl = ttk.LabelFrame(outer, text="Discovery controls", padding=6)
         ctrl.pack(fill=tk.X, pady=(0, 6))
 
@@ -366,7 +510,7 @@ class JobHunterApp(tk.Tk):
         ttk.Label(sig_comp_hdr, text="Company targets (one per line):").pack(side=tk.LEFT)
         self._sig_comp_status = ttk.Label(sig_comp_hdr, text="", foreground="#7f8c8d")
         self._sig_comp_status.pack(side=tk.LEFT, padx=8)
-        ttk.Button(sig_comp_hdr, text="â†º Refresh", command=self._refresh_signal_companies).pack(side=tk.RIGHT)
+        ttk.Button(sig_comp_hdr, text="* Refresh", command=self._refresh_signal_companies).pack(side=tk.RIGHT)
         self.sig_companies_box = scrolledtext.ScrolledText(
             left_ctrl, height=4, wrap=tk.WORD, font=("Consolas", 9)
         )
@@ -391,14 +535,14 @@ class JobHunterApp(tk.Tk):
         btn_row = ttk.Frame(right_ctrl)
         btn_row.pack(fill=tk.X, pady=(10, 0))
         tk.Button(
-            btn_row, text="â–¶  Run Signal Search",
+            btn_row, text=">  Run Signal Search",
             command=self.run_signal_discovery,
             bg="#1a7f37", fg="white", activebackground="#116329", activeforeground="white",
             font=("Segoe UI", 9, "bold"), relief=tk.FLAT, padx=10, pady=4,
         ).pack(side=tk.LEFT, padx=(0, 4))
         ttk.Button(btn_row, text="Reload", command=self.refresh_signals_table).pack(side=tk.LEFT, padx=2)
 
-        # â”€â”€ Filter bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Filter bar --------------------------------------------------------
         fbar = ttk.Frame(outer)
         fbar.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(fbar, text="Filter status:").pack(side=tk.LEFT)
@@ -419,7 +563,7 @@ class JobHunterApp(tk.Tk):
         self.sig_count_label = ttk.Label(fbar, text="", foreground="#7f8c8d")
         self.sig_count_label.pack(side=tk.RIGHT, padx=8)
 
-        # â”€â”€ Main paned area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Main paned area ---------------------------------------------------
         paned = ttk.PanedWindow(outer, orient=tk.VERTICAL)
         paned.pack(fill=tk.BOTH, expand=True)
 
@@ -460,7 +604,7 @@ class JobHunterApp(tk.Tk):
         self.sig_tree.bind("<<TreeviewSelect>>", self.on_signal_select)
         self.sig_tree.bind("<Double-1>", lambda e: self.open_signal_url())
 
-        # â”€â”€ Detail / action panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Detail / action panel ---------------------------------------------
         detail_frame = ttk.LabelFrame(paned, text="Signal detail & outreach", padding=6)
         paned.add(detail_frame, weight=2)
 
@@ -481,14 +625,14 @@ class JobHunterApp(tk.Tk):
         ttk.Button(action_row, text="Copy message", command=self.copy_signal_message).pack(side=tk.LEFT, padx=4)
         ttk.Button(action_row, text="Copy follow-up", command=self.copy_signal_followup).pack(side=tk.LEFT, padx=4)
         tk.Button(
-            action_row, text="â†’ Push selected to Outreach",
+            action_row, text="-> Push selected to Outreach",
             command=self.push_selected_signals_to_outreach,
             bg="#0969da", fg="white", activebackground="#1a3f6f",
             activeforeground="white", font=("Segoe UI", 9, "bold"),
             relief=tk.FLAT, padx=8,
         ).pack(side=tk.LEFT, padx=(8, 2))
         tk.Button(
-            action_row, text="â†’ Push ALL HIGH+MEDIUM",
+            action_row, text="-> Push ALL HIGH+MEDIUM",
             command=self.push_all_signals_to_outreach,
             bg="#2471a3", fg="white", activebackground="#1a5276",
             activeforeground="white", relief=tk.FLAT, padx=6,
@@ -500,7 +644,7 @@ class JobHunterApp(tk.Tk):
             activeforeground="white", relief=tk.FLAT, padx=6,
         ).pack(side=tk.RIGHT, padx=4)
 
-        # â”€â”€ Manual import â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Manual import -----------------------------------------------------
         import_frame = ttk.LabelFrame(detail_frame, text="Manual import (paste post text / URL)", padding=4)
         import_frame.pack(fill=tk.X, pady=(4, 4))
 
@@ -525,7 +669,7 @@ class JobHunterApp(tk.Tk):
         self.sig_imp_linkedin_var = tk.StringVar()
         e = ttk.Entry(imp_urls, textvariable=self.sig_imp_linkedin_var, width=38)
         e.pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Label(imp_urls, text="â† required to send", foreground="#9a6700").pack(side=tk.LEFT)
+        ttk.Label(imp_urls, text="<- required to send", foreground="#9a6700").pack(side=tk.LEFT)
 
         imp_text_row = ttk.Frame(import_frame)
         imp_text_row.pack(fill=tk.X)
@@ -538,7 +682,7 @@ class JobHunterApp(tk.Tk):
             imp_text_row, text="Import", command=self.import_signal_from_paste
         ).pack(side=tk.LEFT, anchor=tk.N, pady=2)
 
-        # â”€â”€ Detail text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Detail text -------------------------------------------------------
         self.sig_detail = scrolledtext.ScrolledText(
             detail_frame, height=10, wrap=tk.WORD, font=("Consolas", 9)
         )
@@ -575,7 +719,7 @@ class JobHunterApp(tk.Tk):
                     (row.get("title") or "")[:32],
                     (row.get("role_mentioned") or "")[:20],
                     (row.get("location_mentioned") or "")[:16],
-                    "âœ“" if row.get("is_uae_national") else "",
+                    "*" if row.get("is_uae_national") else "",
                     row.get("relevance_score", 0),
                     (row.get("post_date") or "")[:10],
                     row.get("status", "Not reviewed"),
@@ -606,7 +750,7 @@ class JobHunterApp(tk.Tk):
             f"{'='*60}",
             f"Signal: {row.get('signal_strength')}  |  Score: {row.get('relevance_score')}/100  |  UAE National: {'Yes' if row.get('is_uae_national') else 'No'}",
             f"Company:  {row.get('company') or '(unknown)'}",
-            f"Person:   {row.get('person') or '(unknown)'}   â€”   {row.get('title') or '(title unknown)'}",
+            f"Person:   {row.get('person') or '(unknown)'}   -   {row.get('title') or '(title unknown)'}",
             f"Role:     {row.get('role_mentioned') or '(not specified)'}",
             f"Location: {row.get('location_mentioned') or '(not specified)'}",
             f"Post date: {row.get('post_date') or '(unknown)'}",
@@ -623,16 +767,16 @@ class JobHunterApp(tk.Tk):
             "Why relevant to Rashed:",
             row.get("why_relevant") or "",
             "",
-            "â”€â”€â”€ Message to send â”€â”€â”€",
+            "--- Message to send ---",
             row.get("message_to_send") or "(not generated)",
             "",
-            "â”€â”€â”€ Follow-up after acceptance â”€â”€â”€",
+            "--- Follow-up after acceptance ---",
             row.get("followup_message") or "(not generated)",
             "",
-            "â”€â”€â”€ Raw snippet â”€â”€â”€",
+            "--- Raw snippet ---",
             row.get("raw_snippet") or "",
             "",
-            f"Status: {row.get('status')}   Notes: {row.get('notes') or 'â€”'}",
+            f"Status: {row.get('status')}   Notes: {row.get('notes') or '-'}",
         ]
         self.sig_detail.delete("1.0", tk.END)
         self.sig_detail.insert(tk.END, "\n".join(lines))
@@ -729,7 +873,7 @@ class JobHunterApp(tk.Tk):
         self.log_msg(
             f"Imported {signal.get('signal_strength')} signal "
             f"(score {signal.get('relevance_score')}) from {company or url or 'paste'}"
-            + (" â€” LinkedIn URL saved" if linkedin_url else " â€” no LinkedIn URL yet")
+            + (" - LinkedIn URL saved" if linkedin_url else " - no LinkedIn URL yet")
         )
 
     def push_selected_signals_to_outreach(self):
@@ -745,10 +889,10 @@ class JobHunterApp(tk.Tk):
         self.refresh_linkedin_outreach()
         msg = f"Pushed {pushed} signal(s) to Outreach tab."
         if skipped:
-            msg += f"\n{skipped} have no LinkedIn /in/ URL â€” add it before sending."
+            msg += f"\n{skipped} have no LinkedIn /in/ URL - add it before sending."
         if warnings:
             msg += "\n\n" + "\n".join(warnings[:6])
-        messagebox.showinfo("Signals â†’ Outreach", msg)
+        messagebox.showinfo("Signals -> Outreach", msg)
         self.log_msg(f"[SIGNAL] Pushed {pushed} signal(s) to Outreach")
         # Switch to Outreach sub-tab so user sees the result
         if hasattr(self, "_linkedin_subnb"):
@@ -768,7 +912,7 @@ class JobHunterApp(tk.Tk):
         if not messagebox.askyesno(
             "Push to Outreach",
             f"Push {len(candidates)} HIGH/MEDIUM signal(s) to the Outreach tab?\n\n"
-            "Signals without a LinkedIn /in/ URL will be flagged â€” add the URL before sending."
+            "Signals without a LinkedIn /in/ URL will be flagged - add the URL before sending."
         ):
             return
         ids = [s["id"] for s in candidates]
@@ -777,8 +921,8 @@ class JobHunterApp(tk.Tk):
         self.refresh_linkedin_outreach()
         msg = f"Pushed {pushed} signal(s) to Outreach tab."
         if skipped:
-            msg += f"\n{skipped} are missing LinkedIn /in/ URLs â€” add before sending."
-        messagebox.showinfo("Signals â†’ Outreach", msg)
+            msg += f"\n{skipped} are missing LinkedIn /in/ URLs - add before sending."
+        messagebox.showinfo("Signals -> Outreach", msg)
         self.log_msg(f"[SIGNAL] Pushed {pushed} signal(s) to Outreach ({skipped} need LinkedIn URL)")
         if hasattr(self, "_linkedin_subnb"):
             self._linkedin_subnb.select(self._outreach_subtab)
@@ -815,7 +959,7 @@ class JobHunterApp(tk.Tk):
             )
             self.after(0, self.refresh_signals_table)
             self.log_msg(
-                f"[SIGNAL] Done â€” {len(found)} new signal(s) discovered. "
+                f"[SIGNAL] Done - {len(found)} new signal(s) discovered. "
                 f"Check the Signals tab for results."
             )
 
@@ -825,7 +969,7 @@ class JobHunterApp(tk.Tk):
             command_detail=f"queries={max_q}, per_query={per_q}, companies={len(extra_companies)}",
         )
 
-    # â”€â”€ Profile Settings tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Profile Settings tab -------------------------------------------------
 
     def _build_profile_tab(self):
         top_bar = ttk.Frame(self.profile_tab, padding=6)
@@ -854,7 +998,7 @@ class JobHunterApp(tk.Tk):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         outer = self._profile_scroll_inner
 
-        # â”€â”€ Account & credentials â”€â”€
+        # -- Account & credentials --
         acct = ttk.LabelFrame(outer, text="Account & credentials (saved to profile_settings.json)", padding=8)
         acct.pack(fill=tk.X, padx=8, pady=6)
 
@@ -878,8 +1022,8 @@ class JobHunterApp(tk.Tk):
             ("LINKEDIN_POST_MAX_RESULTS", "LinkedIn posts per run"),
             ("GOOGLE_JOBS_SEARCH", "Google Jobs source (1/0)"),
             ("BROWSER_GOOGLE_SEARCH", "Browser Google indexed search (1/0)"),
-            ("SERPAPI_API_KEY", "SerpApi key â€” optional, upgrades hidden-post search"),
-            ("GOOGLE_SEARCH_API_KEY", "Google Search API key â€” optional, not recommended"),
+            ("SERPAPI_API_KEY", "SerpApi key - optional, upgrades hidden-post search"),
+            ("GOOGLE_SEARCH_API_KEY", "Google Search API key - optional, not recommended"),
             ("GOOGLE_SEARCH_CX", "Google Search engine ID (optional)"),
         ]
         for key, label in env_fields:
@@ -892,7 +1036,7 @@ class JobHunterApp(tk.Tk):
                 side=tk.LEFT, fill=tk.X, expand=True, padx=4
             )
 
-        # â”€â”€ Sign up & application defaults â”€â”€
+        # -- Sign up & application defaults --
         signup_fr = ttk.LabelFrame(
             outer,
             text="Sign up & application defaults (for ATS registration / job forms)",
@@ -937,16 +1081,16 @@ class JobHunterApp(tk.Tk):
                 side=tk.LEFT, fill=tk.X, expand=True, padx=4
             )
 
-        # â”€â”€ Notion sync â”€â”€
+        # -- Notion sync --
         notion_fr = ttk.LabelFrame(
             outer,
-            text="Notion sync (optional â€” local DB stays primary unless STORAGE_BACKEND=notion)",
+            text="Notion sync (optional - local DB stays primary unless STORAGE_BACKEND=notion)",
             padding=8,
         )
         notion_fr.pack(fill=tk.X, padx=8, pady=6)
         ttk.Label(
             notion_fr,
-            text="Pull: import Notion rows â†’ data/jobs.db.  Push: export local jobs â†’ Notion (create or update by URL).",
+            text="Pull: import Notion rows -> data/jobs.db.  Push: export local jobs -> Notion (create or update by URL).",
             wraplength=700,
         ).pack(anchor=tk.W)
         self.notion_sync_gcc_var = tk.BooleanVar(value=False)
@@ -956,15 +1100,15 @@ class JobHunterApp(tk.Tk):
         notion_btns = ttk.Frame(notion_fr)
         notion_btns.pack(fill=tk.X, pady=6)
         ttk.Button(
-            notion_btns, text="Pull from Notion â†’ local",
+            notion_btns, text="Pull from Notion -> local",
             command=self.pull_from_notion,
         ).pack(side=tk.LEFT, padx=4)
         ttk.Button(
-            notion_btns, text="Push local â†’ Notion",
+            notion_btns, text="Push local -> Notion",
             command=self.push_to_notion,
         ).pack(side=tk.LEFT, padx=4)
 
-        # â”€â”€ Links â”€â”€
+        # -- Links --
         links = ttk.LabelFrame(outer, text="Links (LinkedIn URL required)", padding=8)
         links.pack(fill=tk.X, padx=8, pady=6)
 
@@ -989,7 +1133,7 @@ class JobHunterApp(tk.Tk):
             anchor=tk.W, pady=4
         )
 
-        # â”€â”€ Resume (used by Apply on all ATS sites) â”€â”€
+        # -- Resume (used by Apply on all ATS sites) --
         resume_fr = ttk.LabelFrame(
             outer,
             text="Resume for applications (Workday / Greenhouse / file uploads)",
@@ -1008,8 +1152,8 @@ class JobHunterApp(tk.Tk):
         ttk.Entry(resume_row, textvariable=self.resume_path_var).pack(
             side=tk.LEFT, fill=tk.X, expand=True, padx=4
         )
-        ttk.Button(resume_row, text="Browseâ€¦", command=self._browse_resume).pack(side=tk.LEFT, padx=2)
-        ttk.Button(resume_row, text="Upload PDFâ€¦", command=self._upload_resume_pdf).pack(
+        ttk.Button(resume_row, text="Browse...", command=self._browse_resume).pack(side=tk.LEFT, padx=2)
+        ttk.Button(resume_row, text="Upload PDF...", command=self._upload_resume_pdf).pack(
             side=tk.LEFT, padx=2
         )
         self.resume_status_var = tk.StringVar(value="")
@@ -1017,16 +1161,16 @@ class JobHunterApp(tk.Tk):
             anchor=tk.W, pady=(4, 0)
         )
 
-        ttk.Label(resume_fr, text="Cover letter (optional â€” leave blank to auto-generate):").pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(resume_fr, text="Cover letter (optional - leave blank to auto-generate):").pack(anchor=tk.W, pady=(8, 0))
         cl_row = ttk.Frame(resume_fr)
         cl_row.pack(fill=tk.X, pady=4)
         self.cover_letter_path_var = tk.StringVar(value="")
         ttk.Entry(cl_row, textvariable=self.cover_letter_path_var).pack(
             side=tk.LEFT, fill=tk.X, expand=True, padx=4
         )
-        ttk.Button(cl_row, text="Browseâ€¦", command=self._browse_cover_letter).pack(side=tk.LEFT, padx=2)
+        ttk.Button(cl_row, text="Browse...", command=self._browse_cover_letter).pack(side=tk.LEFT, padx=2)
 
-        # â”€â”€ Profile enrich â”€â”€
+        # -- Profile enrich --
         enrich_fr = ttk.LabelFrame(outer, text="Profile enrichment", padding=8)
         enrich_fr.pack(fill=tk.X, padx=8, pady=6)
         ttk.Label(
@@ -1040,7 +1184,7 @@ class JobHunterApp(tk.Tk):
         self.safe_enrich_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             enrich_fr,
-            text="Legacy mode: append enrich into source profile (uncheck for dual layer â†’ data/enhanced/)",
+            text="Legacy mode: append enrich into source profile (uncheck for dual layer -> data/enhanced/)",
             variable=self.safe_enrich_var,
         ).pack(anchor=tk.W)
         if not use_dual_layer():
@@ -1055,10 +1199,10 @@ class JobHunterApp(tk.Tk):
         ]:
             ttk.Button(btn_row, text=text, command=cmd).pack(side=tk.LEFT, padx=4)
 
-        # â”€â”€ Profile markdown (source) â”€â”€
+        # -- Profile markdown (source) --
         md_fr = ttk.LabelFrame(
             outer,
-            text="Source profile â€” applicant_profile.md (your content; authoritative)",
+            text="Source profile - applicant_profile.md (your content; authoritative)",
             padding=8,
         )
         md_fr.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
@@ -1077,7 +1221,7 @@ class JobHunterApp(tk.Tk):
 
         enh_fr = ttk.LabelFrame(
             outer,
-            text="Enhanced profile â€” data/enhanced/applicant_profile_enhanced.md (auto)",
+            text="Enhanced profile - data/enhanced/applicant_profile_enhanced.md (auto)",
             padding=8,
         )
         enh_fr.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
@@ -1205,7 +1349,7 @@ class JobHunterApp(tk.Tk):
             )
         return True
 
-    # â”€â”€ Requirements tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Requirements tab -------------------------------------------------------
 
     def _build_requirements_tab(self):
         outer = ttk.Frame(self.req_tab, padding=8)
@@ -1231,7 +1375,7 @@ class JobHunterApp(tk.Tk):
 
         ttk.Label(
             general,
-            text="Source â€” applicant_requirements.md: geography, targets, skips, YAML thresholds.",
+            text="Source - applicant_requirements.md: geography, targets, skips, YAML thresholds.",
         ).pack(anchor=tk.W)
         self.req_editor = scrolledtext.ScrolledText(general, height=16, wrap=tk.WORD, font=("Consolas", 10))
         self.req_editor.pack(fill=tk.BOTH, expand=True)
@@ -1286,15 +1430,15 @@ class JobHunterApp(tk.Tk):
         )
 
     def _build_requirements_prompt_builder(self, parent):
-        """Read-only master prompt â€” user copies it into ChatGPT/Claude/etc."""
+        """Read-only master prompt - user copies it into ChatGPT/Claude/etc."""
         from config.requirements_prompts import get_master_prompt
 
         ttk.Label(
             parent,
             text=(
                 "Master prompt for building your Profile + Requirements with ChatGPT, "
-                "Claude, Gemini, or any external LLM. Read-only â€” click Copy then paste "
-                "into your chat. Replace the [PASTE â€¦] sections with your data."
+                "Claude, Gemini, or any external LLM. Read-only - click Copy then paste "
+                "into your chat. Replace the [PASTE ...] sections with your data."
             ),
             wraplength=900,
         ).pack(anchor=tk.W)
@@ -1316,7 +1460,7 @@ class JobHunterApp(tk.Tk):
         self._req_prompt_preview.pack(fill=tk.BOTH, expand=True, pady=4)
         self._req_prompt_text = get_master_prompt()
         self._req_prompt_preview.insert(tk.END, self._req_prompt_text)
-        # Read-only â€” selection + copy keystrokes still work, edits do not.
+        # Read-only - selection + copy keystrokes still work, edits do not.
         self._req_prompt_preview.configure(state=tk.DISABLED)
         self._req_prompt_preview.bind("<Key>", lambda e: "break")
         self._req_prompt_preview.bind("<Button-2>", lambda e: "break")
@@ -1347,7 +1491,7 @@ class JobHunterApp(tk.Tk):
         self.chat_input.insert(tk.END, text)
         self.log_msg("Master prompt loaded into Chat input")
 
-    # â”€â”€ Chat tab (direct Ollama conversation) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Chat tab (direct Ollama conversation) --------------------------------
 
     def _build_chat_tab(self):
         from config.config import OLLAMA_BASE_URL, get_ollama_model
@@ -1368,7 +1512,7 @@ class JobHunterApp(tk.Tk):
         saved_fr.pack(fill=tk.X, padx=6, pady=(0, 4))
         ttk.Label(
             saved_fr,
-            text="Save instructions with /remember â€¦ or phrases like â€œavoid mentioning ADIAâ€. "
+            text="Save instructions with /remember ... or phrases like 'avoid mentioning ADIA'. "
             "Stored in data/chat_saved_prompts.md",
             wraplength=880,
         ).pack(anchor=tk.W)
@@ -1446,7 +1590,7 @@ class JobHunterApp(tk.Tk):
     def _chat_append(self, role: str, text: str):
         if not hasattr(self, "chat_display"):
             return
-        label = {"user": "You", "assistant": "Assistant", "system": "â€”"}.get(role, role)
+        label = {"user": "You", "assistant": "Assistant", "system": "-"}.get(role, role)
         tag = role if role in ("user", "assistant", "system", "error") else "system"
         self.chat_display.configure(state=tk.NORMAL)
         if role != "system":
@@ -1472,7 +1616,7 @@ class JobHunterApp(tk.Tk):
             self.chat_saved_prompts_box.insert(tk.END, "\n".join(f"- {p}" for p in items))
         else:
             self.chat_saved_prompts_box.insert(
-                tk.END, "(none â€” use /remember â€¦ or Save instruction)"
+                tk.END, "(none - use /remember ... or Save instruction)"
             )
 
     def _save_chat_saved_prompts_from_ui(self):
@@ -1486,7 +1630,7 @@ class JobHunterApp(tk.Tk):
             if line.startswith("* "):
                 line = line[2:].strip()
             if line and not line.startswith("("):
-                # strip _(saved â€¦)_ suffix if user edited
+                # strip _(saved ...)_ suffix if user edited
                 line = re.sub(r"\s*_\(saved[^)]*\)_\s*$", "", line)
                 items.append(line)
         _write_prompts_list(items)
@@ -1540,7 +1684,7 @@ class JobHunterApp(tk.Tk):
         self._chat_maybe_auto_save_instruction(text)
         self._chat_busy = True
         self.chat_send_btn.configure(state=tk.DISABLED)
-        self._chat_append("system", "Thinkingâ€¦\n")
+        self._chat_append("system", "Thinking...\n")
 
         def task():
             from config.config import OLLAMA_BASE_URL, get_ollama_model
@@ -1575,7 +1719,7 @@ class JobHunterApp(tk.Tk):
 
     def _chat_finish(self, reply: str, error: str | None):
         self.chat_display.configure(state=tk.NORMAL)
-        pos = self.chat_display.search("Thinkingâ€¦", "end", backwards=True)
+        pos = self.chat_display.search("Thinking...", "end", backwards=True)
         if pos:
             line = int(pos.split(".")[0])
             self.chat_display.delete(f"{line}.0", f"{line + 1}.0")
@@ -1588,7 +1732,7 @@ class JobHunterApp(tk.Tk):
         self._chat_busy = False
         self.chat_send_btn.configure(state=tk.NORMAL)
 
-    # â”€â”€ Console tab (live pipeline output) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Console tab (live pipeline output) -------------------------------------
 
     def _build_console_tab(self):
         top = ttk.Frame(self.console_tab, padding=6)
@@ -1662,7 +1806,7 @@ class JobHunterApp(tk.Tk):
     def _show_console_tab(self):
         self.notebook.select(self.console_tab)
 
-    # â”€â”€ LinkedIn DM outreach tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- LinkedIn DM outreach tab --------------------------------------------
 
     def _build_linkedin_dm_tab(self):
         from agents.linkedin_outreach import default_companies_text, OUTREACH_STATUSES
@@ -1674,7 +1818,7 @@ class JobHunterApp(tk.Tk):
         self._outreach_subtab = ttk.Frame(self._linkedin_subnb)
         self._signals_subtab = ttk.Frame(self._linkedin_subnb)
         self._linkedin_subnb.add(self._outreach_subtab, text="Outreach")
-        self._linkedin_subnb.add(self._signals_subtab, text="ðŸ” Hidden Signals")
+        self._linkedin_subnb.add(self._signals_subtab, text=" Hidden Signals")
 
         self._build_signals_tab(self._signals_subtab)
 
@@ -1684,7 +1828,7 @@ class JobHunterApp(tk.Tk):
         info = (
             "LinkedIn outreach: find leads outside the program (copy the LLM prompt into ChatGPT/Claude), "
             "import the returned CSV or profile URLs, then send from here using your saved LinkedIn session. "
-            "No in-app people search â€” avoids captcha/checkpoints."
+            "No in-app people search - avoids captcha/checkpoints."
         )
         ttk.Label(outer, text=info, wraplength=1100).pack(anchor=tk.W)
 
@@ -1698,7 +1842,7 @@ class JobHunterApp(tk.Tk):
         ttk.Label(comp_hdr, text="Companies / campaign targets:").pack(side=tk.LEFT)
         self._dm_comp_status = ttk.Label(comp_hdr, text="loading...", foreground="#7f8c8d")
         self._dm_comp_status.pack(side=tk.LEFT, padx=8)
-        ttk.Button(comp_hdr, text="â†º Refresh", command=self._refresh_outreach_companies).pack(side=tk.RIGHT)
+        ttk.Button(comp_hdr, text="* Refresh", command=self._refresh_outreach_companies).pack(side=tk.RIGHT)
         self.dm_companies_box = scrolledtext.ScrolledText(
             left, height=5, wrap=tk.WORD, font=("Consolas", 9)
         )
@@ -1797,7 +1941,7 @@ class JobHunterApp(tk.Tk):
         ttk.Button(track, text="Open + copy message", command=self.open_and_copy_linkedin_message).pack(
             side=tk.LEFT, padx=4
         )
-        # â”€â”€ Send mode radio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # -- Send mode radio --------------------------------------------------
         ttk.Separator(track, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6)
         self.dm_send_mode_var = tk.StringVar(value="connect")
         ttk.Label(track, text="Mode:").pack(side=tk.LEFT)
@@ -1821,6 +1965,14 @@ class JobHunterApp(tk.Tk):
         ttk.Button(track, text="Copy follow-up", command=self.copy_linkedin_followup_message).pack(
             side=tk.LEFT, padx=4
         )
+
+        # Social listening hooks display
+        hooks_frame = ttk.LabelFrame(detail_frame, text="Social listening hooks (use in your message)", padding=4)
+        hooks_frame.pack(fill=tk.X, pady=(0, 4))
+        self.dm_hooks_display = scrolledtext.ScrolledText(
+            hooks_frame, height=2, wrap=tk.WORD, font=("Consolas", 9), state=tk.DISABLED, bg="#f6f8fa"
+        )
+        self.dm_hooks_display.pack(fill=tk.X)
 
         self.dm_detail = scrolledtext.ScrolledText(
             detail_frame, height=12, wrap=tk.WORD, font=("Consolas", 9)
@@ -2157,12 +2309,34 @@ class JobHunterApp(tk.Tk):
                 return row
         return {}
 
-    def on_linkedin_outreach_select(self, _event=None):
-        row = self._selected_dm_row()
+    def on_linkedin_outreach_select(self, event=None):
+        from engine.social_listening import extract_hooks
+
+        sel = self.dm_tree.selection()
+        if not sel:
+            self.dm_detail.delete("1.0", tk.END)
+            self.dm_hooks_display.configure(state=tk.NORMAL)
+            self.dm_hooks_display.delete("1.0", tk.END)
+            self.dm_hooks_display.configure(state=tk.DISABLED)
+            return
+
+        row_id = sel[0]
+        row = {}
+        try:
+            children = self.dm_tree.get_children()
+            idx = children.index(row_id)
+            rows = getattr(self, "_dm_rows", [])
+            if 0 <= idx < len(rows):
+                row = rows[idx]
+        except (ValueError, IndexError, AttributeError):
+            row = {}
+
         if not row:
             return
+
         self.dm_status_var.set(row.get("Outreach status") or "Not sent")
         self.dm_notes_var.set(row.get("Notes") or "")
+
         lines = [
             f"{row.get('Person name')} @ {row.get('Company')}",
             f"Title: {row.get('Person title')}",
@@ -2178,6 +2352,9 @@ class JobHunterApp(tk.Tk):
             "",
             "Message angle:",
             row.get("Message angle") or "",
+            "",
+            "Suggested message:",
+            row.get("Suggested message") or "",
             "",
             "Connection message:",
             row.get("LinkedIn connection message") or "",
@@ -2195,6 +2372,40 @@ class JobHunterApp(tk.Tk):
         ]
         self.dm_detail.delete("1.0", tk.END)
         self.dm_detail.insert(tk.END, "\n".join(lines))
+
+        hooks_text = ""
+        try:
+            all_hooks = []
+            for field in (
+                "Suggested message",
+                "Why this person",
+                "Message angle",
+                "raw_snippet",
+                "hiring_language",
+            ):
+                text = row.get(field) or ""
+                if text:
+                    all_hooks.extend(extract_hooks(text, max_hooks=2))
+
+            seen = set()
+            unique_hooks = []
+            for hook in all_hooks:
+                if hook not in seen:
+                    seen.add(hook)
+                    unique_hooks.append(hook)
+
+            if unique_hooks:
+                hooks_text = "\n".join(f"* {hook}" for hook in unique_hooks)
+            else:
+                hooks_text = "(no hooks found in signal/post data)"
+        except Exception:
+            hooks_text = "(hooks extraction unavailable)"
+
+        self.dm_hooks_display.configure(state=tk.NORMAL)
+        self.dm_hooks_display.delete("1.0", tk.END)
+        self.dm_hooks_display.insert(tk.END, hooks_text)
+        self.dm_hooks_display.configure(state=tk.DISABLED)
+
         self._update_dm_send_button_state(row)
 
     def save_linkedin_outreach_status(self):
@@ -2509,7 +2720,7 @@ class JobHunterApp(tk.Tk):
             cmd += f"  ({extra})"
         self._write_console(f"\n[{ts}] PS C:\\Users\\Lordy\\jobhuntrr> {cmd}\n")
 
-    # â”€â”€ Logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Logging ----------------------------------------------------------------
 
     def log_msg(self, msg: str):
         self._console_log_line(msg)
@@ -2520,7 +2731,7 @@ class JobHunterApp(tk.Tk):
         except ValueError:
             return 0
 
-    # â”€â”€ Jobs logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Jobs logic -------------------------------------------------------------
 
     def _get_filter_decision(self):
         label = self.filter_var.get()
@@ -2569,6 +2780,7 @@ class JobHunterApp(tk.Tk):
                 sal = "LOW"
             method = _apply_method_display(job)
             mode = (job.get("apply_mode") or "")[:10]
+            action = (job.get("recommended_action") or "")[:14]
             self.tree.insert(
                 "", tk.END, iid=iid,
                 tags=(disp,) if disp in TAG_COLORS else (),
@@ -2576,9 +2788,10 @@ class JobHunterApp(tk.Tk):
                     job.get("score", 0),
                     job.get("sps") or "",
                     job.get("ips") or "",
+                    action,
                     mode,
                     disp,
-                    "â˜…" if job.get("suggested_alternate") else "",
+                    "*" if job.get("suggested_alternate") else "",
                     sal,
                     "Yes" if job.get("outside_target_industry") else "",
                     (job.get("company") or "")[:36],
@@ -2606,6 +2819,7 @@ class JobHunterApp(tk.Tk):
         "score": lambda j: j.get("score") or 0,
         "sps": lambda j: j.get("sps") or 0,
         "ips": lambda j: j.get("ips") or 0,
+        "action": lambda j: (j.get("recommended_action") or "").lower(),
         "mode": lambda j: (j.get("apply_mode") or "").lower(),
         "decision": lambda j: j.get("decision") or "",
         "alt": lambda j: 1 if j.get("suggested_alternate") else 0,
@@ -2647,7 +2861,7 @@ class JobHunterApp(tk.Tk):
                 tags=(disp,) if disp in TAG_COLORS else (),
                 values=(
                     job.get("score", 0), disp,
-                    "â˜…" if job.get("suggested_alternate") else "",
+                    "*" if job.get("suggested_alternate") else "",
                     sal,
                     "Yes" if job.get("outside_target_industry") else "",
                     (job.get("company") or "")[:36],
@@ -2672,7 +2886,7 @@ class JobHunterApp(tk.Tk):
         }
         for col, label in spec.items():
             if col == self._sort_col:
-                arrow = " â–²" if self._sort_asc else " â–¼"
+                arrow = " ^" if self._sort_asc else " v"
                 self.tree.heading(col, text=label + arrow)
             else:
                 self.tree.heading(col, text=label)
@@ -2702,10 +2916,10 @@ class JobHunterApp(tk.Tk):
             for j in jobs:
                 d = j.get("decision") or "unknown"
                 decisions[d] = decisions.get(d, 0) + 1
-            dec_summary = ", ".join(f"{v}Ã— {k}" for k, v in sorted(decisions.items()))
+            dec_summary = ", ".join(f"{v}Ã- {k}" for k, v in sorted(decisions.items()))
             avg_score = sum(j.get("score") or 0 for j in jobs) / max(len(jobs), 1)
             lines = [
-                f"â”€â”€ {n} jobs selected â”€â”€",
+                f"-- {n} jobs selected --",
                 f"Avg score: {avg_score:.0f}/100",
                 f"Decisions: {dec_summary}",
                 "",
@@ -2716,8 +2930,8 @@ class JobHunterApp(tk.Tk):
             ]
             for j in jobs:
                 lines.append(
-                    f"  â€¢ {(j.get('title') or '')[:40]}  @  {(j.get('company') or '')[:30]}"
-                    f"  [{j.get('decision') or 'â€”'}]  score={j.get('score') or 0}"
+                    f"  * {(j.get('title') or '')[:40]}  @  {(j.get('company') or '')[:30]}"
+                    f"  [{j.get('decision') or '-'}]  score={j.get('score') or 0}"
                 )
             self.detail.delete("1.0", tk.END)
             self.detail.insert(tk.END, "\n".join(lines))
@@ -2732,10 +2946,10 @@ class JobHunterApp(tk.Tk):
         lines = [
             f"{job['title']} @ {job['company']}",
             f"Score: {job['score']}/100  |  Decision: {job.get('decision_display')}",
-            f"SPS: {job.get('sps') or '—'}  |  IPS: {job.get('ips') or '—'}  |  Mode: {job.get('apply_mode') or '—'}",
+            f"SPS: {job.get('sps') or '-'}  |  IPS: {job.get('ips') or '-'}  |  Mode: {job.get('apply_mode') or '-'}",
         ]
         if job.get("engine_action"):
-            lines.append(f"Engine: {job.get('engine_action')} — {job.get('engine_reason') or ''}")
+            lines.append(f"Engine: {job.get('engine_action')} - {job.get('engine_reason') or ''}")
         if job.get("outreach_channel"):
             lines.append(f"Outreach waterfall: L{job.get('outreach_level')} ({job.get('outreach_channel')})")
         lines.append(f"Off-target industry: {'Yes' if job.get('outside_target_industry') else 'No'}")
@@ -2747,20 +2961,20 @@ class JobHunterApp(tk.Tk):
                 lines.append(f"  {job['alternate_suggestion_reason']}")
         if job.get("salary_snippet") or job.get("min_monthly_aed"):
             lines.append(
-                f"Salary: {job.get('salary_snippet') or 'â€”'} "
-                f"({job.get('min_monthly_aed') or '?'}â€“{job.get('max_monthly_aed') or '?'} AED/mo parsed)"
+                f"Salary: {job.get('salary_snippet') or '-'} "
+                f"({job.get('min_monthly_aed') or '?'}-{job.get('max_monthly_aed') or '?'} AED/mo parsed)"
             )
         if job.get("salary_below_minimum"):
-            lines.append("  âš  Below your minimum salary threshold")
+            lines.append("  * Below your minimum salary threshold")
         lines.extend([
             f"Location: {job.get('location')}",
             f"Angle: {job.get('positioning_angle')}  |  Source: {job.get('source')}",
-            f"Apply method: {job.get('apply_method') or 'â€”'}",
-            f"Date posted: {job.get('date_posted') or 'â€”'}",
+            f"Apply method: {job.get('apply_method') or '-'}",
+            f"Date posted: {job.get('date_posted') or '-'}",
             f"Applied: {job.get('applied')}  |  Discovered: {job.get('discovered_at')}",
-            f"Submission status: {job.get('submission_status') or 'â€”'}",
+            f"Submission status: {job.get('submission_status') or '-'}",
             f"URL: {job.get('job_url')}",
-            f"Direct URL: {job.get('job_url_direct') or 'â€”'}",
+            f"Direct URL: {job.get('job_url_direct') or '-'}",
         ])
         if job.get("submission_confirmed_at"):
             lines.append(f"Confirmed at: {job['submission_confirmed_at']}")
@@ -2785,7 +2999,7 @@ class JobHunterApp(tk.Tk):
             try:
                 prof = _json.loads(jp)
                 lines.append("")
-                lines.append("â€” Structured job profile â€”")
+                lines.append("- Structured job profile -")
                 for key in ("role_summary", "department", "company_about", "experience_level"):
                     if prof.get(key):
                         lines.append(f"{key}: {str(prof[key])[:500]}")
@@ -2797,7 +3011,7 @@ class JobHunterApp(tk.Tk):
                 pass
         desc = job.get("description") or ""
         if desc:
-            lines.extend(["", "â€” Full posting â€”", desc])
+            lines.extend(["", "- Full posting -", desc])
         self.detail.delete("1.0", tk.END)
         self.detail.insert(tk.END, "\n".join(lines))
 
@@ -2829,7 +3043,7 @@ class JobHunterApp(tk.Tk):
                                 "(Click a row; Shift+click or Ctrl+click for multiple.)")
             return
         action = self._bulk_action_var.get()
-        if action == "â€” choose â€”":
+        if action == "- choose -":
             messagebox.showinfo("JobHuntrr", "Choose an action from the dropdown first.")
             return
         n = len(ids)
@@ -2874,9 +3088,9 @@ class JobHunterApp(tk.Tk):
                     })
                 self.store.update_job(jid, **fields)
             self.refresh_table()
-            self.log_msg(f"Set {n} job(s) â†’ {decision}")
+            self.log_msg(f"Set {n} job(s) -> {decision}")
 
-        self._bulk_action_var.set("â€” choose â€”")
+        self._bulk_action_var.set("- choose -")
 
     def mark_applied(self):
         ids = self._get_selected_ids()
@@ -2935,7 +3149,7 @@ class JobHunterApp(tk.Tk):
         if not job:
             return
         new = simpledialog.askinteger(
-            "Edit score", "Score (0â€“100):",
+            "Edit score", "Score (0-100):",
             minvalue=0, maxvalue=100, initialvalue=job.get("score", 0),
         )
         if new is None:
@@ -2968,9 +3182,9 @@ class JobHunterApp(tk.Tk):
         ttk.Button(win, text="Save", command=save).pack(pady=6)
 
     def _request_stop(self):
-        """Called by the Stop button â€” signals all pipeline loops to exit cleanly."""
+        """Called by the Stop button - signals all pipeline loops to exit cleanly."""
         _stop_flag.request_stop()
-        self.log_msg("--- Stop requested â€” finishing current step then halting ---")
+        self.log_msg("--- Stop requested - finishing current step then halting ---")
         # Keep button disabled after press to avoid double-clicks
         self._set_running_state(True, stopping=True)
 
@@ -3286,7 +3500,7 @@ class JobHunterApp(tk.Tk):
             return
         self._show_gap_dialog(missing)
 
-    # â”€â”€ Profile logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # -- Profile logic ----------------------------------------------------------
 
     def reload_profile_editor(self):
         from agents.profile_manager import load_profile_body, migrate_inline_enrichment_to_dual_layer
@@ -3313,11 +3527,11 @@ class JobHunterApp(tk.Tk):
             return
         p = self.resume_path_var.get().strip() if hasattr(self, "resume_path_var") else ""
         if p and Path(p).is_file():
-            self.resume_status_var.set(f"OK â€” file exists ({Path(p).name})")
+            self.resume_status_var.set(f"OK - file exists ({Path(p).name})")
         elif p:
-            self.resume_status_var.set(f"WARNING â€” file not found: {p}")
+            self.resume_status_var.set(f"WARNING - file not found: {p}")
         else:
-            self.resume_status_var.set("No resume path set â€” Apply will fail uploads.")
+            self.resume_status_var.set("No resume path set - Apply will fail uploads.")
 
     def _browse_resume(self):
         path = filedialog.askopenfilename(
@@ -3368,11 +3582,11 @@ class JobHunterApp(tk.Tk):
         from config.md_loader import load_profile_enhanced, load_requirements_enhanced
         if hasattr(self, "profile_enhanced_editor"):
             self.profile_enhanced_editor.delete("1.0", tk.END)
-            self.profile_enhanced_editor.insert(tk.END, load_profile_enhanced() or "(empty â€” run Enrich)")
+            self.profile_enhanced_editor.insert(tk.END, load_profile_enhanced() or "(empty - run Enrich)")
         if hasattr(self, "req_enhanced_editor"):
             self.req_enhanced_editor.delete("1.0", tk.END)
             self.req_enhanced_editor.insert(
-                tk.END, load_requirements_enhanced() or "(empty â€” run Enrich)"
+                tk.END, load_requirements_enhanced() or "(empty - run Enrich)"
             )
 
     def save_profile_enhanced_editor(self):
@@ -3430,12 +3644,12 @@ class JobHunterApp(tk.Tk):
                 gcc_only=self.notion_sync_gcc_var.get(),
             )
             self.log_msg(
-                f"Notion pull: {r['total_notion']} rows fetched â€” "
+                f"Notion pull: {r['total_notion']} rows fetched - "
                 f"{r['imported']} new, {r['updated']} updated, {r['skipped']} skipped"
             )
             if r['skipped'] > 0:
                 self.log_msg(
-                    f"  ({r['skipped']} skipped â€” check console for details; "
+                    f"  ({r['skipped']} skipped - check console for details; "
                     "common cause: rows with no title/company)"
                 )
             self.after(0, self.refresh_table)
@@ -3493,7 +3707,7 @@ class JobHunterApp(tk.Tk):
             return
         dual_layer = use_dual_layer() and not self.safe_enrich_var.get()
         if dual_layer:
-            mode = "dual layer â†’ data/enhanced/ (source profile unchanged)"
+            mode = "dual layer -> data/enhanced/ (source profile unchanged)"
         else:
             mode = (
                 "legacy: append to source profile"
@@ -3503,7 +3717,7 @@ class JobHunterApp(tk.Tk):
         if not messagebox.askyesno(
             "Enrich profile",
             f"Mode: {mode}. Backup saved to data/profile_backups/ first.\n\n"
-            "Opens LinkedIn, GitHub, website, and parses your resume (1â€“3 min). Continue?",
+            "Opens LinkedIn, GitHub, website, and parses your resume (1-3 min). Continue?",
         ):
             return
 
@@ -3581,7 +3795,7 @@ class JobHunterApp(tk.Tk):
 
     def _show_gap_dialog(self, missing: list[str]):
         win = tk.Toplevel(self)
-        win.title("Profile gaps â€” add missing info")
+        win.title("Profile gaps - add missing info")
         win.geometry("520x400")
         ttk.Label(
             win,

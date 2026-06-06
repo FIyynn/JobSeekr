@@ -447,10 +447,15 @@ def apply_engine_decision_gate(job: dict) -> dict:
     """
     if job.get("applied"):
         return job
-    apply_mode, engine_action, reason = determine_apply_mode(job)
-    job["apply_mode"] = apply_mode
-    job["engine_action"] = engine_action
-    job["engine_reason"] = reason
+    if job.get("apply_mode"):
+        apply_mode = job["apply_mode"]
+        engine_action = job.get("engine_action") or ""
+        reason = job.get("engine_reason") or ""
+    else:
+        apply_mode, engine_action, reason = determine_apply_mode(job)
+        job["apply_mode"] = apply_mode
+        job["engine_action"] = engine_action
+        job["engine_reason"] = reason
 
     if apply_mode in ("networking_only", "referral_first", "blocked_bespoke"):
         if job.get("decision") == "auto_apply":
@@ -464,12 +469,20 @@ def apply_engine_decision_gate(job: dict) -> dict:
     return job
 
 
+REFERRAL_STATUSES = ("none", "requested", "referred", "declined", "timeout")
+
+
 def enrich_job_with_engine(job: dict, contact: Optional[dict] = None) -> dict:
     """Main hook: attach SPS, IPS, apply mode, outreach plan to a job dict."""
     sps_data = compute_sps(job, contact)
     ips_data = compute_ips(job, contact)
     waterfall = plan_outreach_waterfall(job, contact)
     apply_mode, engine_action, reason = determine_apply_mode(job)
+    track = (
+        "hidden"
+        if job.get("source") in ("employee_post", "web_indexed", "signal", "manual_import")
+        else job.get("track") or "visible"
+    )
 
     job.update({
         "sps": sps_data["sps"],
@@ -485,15 +498,29 @@ def enrich_job_with_engine(job: dict, contact: Optional[dict] = None) -> dict:
         "outreach_channel": waterfall["outreach_channel"],
         "job_age_hours": parse_job_age_hours(job),
         "applicant_count": parse_applicant_count(job),
+        "track": track,
+        "referral_status": job.get("referral_status") or "none",
         "engine_json": json.dumps({
             "sps": sps_data,
             "ips": ips_data,
             "waterfall": waterfall,
-            "track": "hidden" if job.get("source") in ("employee_post", "web_indexed", "signal") else "visible",
+            "track": track,
         }, ensure_ascii=False),
     })
 
-    return apply_engine_decision_gate(job)
+    job = apply_engine_decision_gate(job)
+    try:
+        from engine.recommend_action import apply_recommendation_to_job
+        return apply_recommendation_to_job(job, contact)
+    except Exception as exc:
+        logger.debug("recommend_action skipped: %s", exc)
+        return job
+
+
+def recommend_action(job: dict, contact: Optional[dict] = None) -> dict:
+    """Public decision API — delegates to engine.recommend_action."""
+    from engine.recommend_action import recommend_action as _rec
+    return _rec(job, contact)
 
 
 def job_eligible_for_auto_apply(job: dict) -> bool:
@@ -502,6 +529,15 @@ def job_eligible_for_auto_apply(job: dict) -> bool:
         return False
     if job.get("applied"):
         return False
+    action = (job.get("recommended_action") or "").lower()
+    if action and action != "apply_now":
+        return False
+    try:
+        from engine.recommend_action import referral_blocks_apply
+        if referral_blocks_apply(job):
+            return False
+    except Exception:
+        pass
     mode = job.get("apply_mode") or determine_apply_mode(job)[0]
     if mode in ("networking_only", "referral_first"):
         return False

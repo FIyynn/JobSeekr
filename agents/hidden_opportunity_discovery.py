@@ -28,6 +28,8 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger("hidden_opportunity_discovery")
 
+from engine.signal_detector import discover_all_signals
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 DATA_DIR.mkdir(exist_ok=True)
@@ -626,16 +628,58 @@ def run_signal_discovery(
     Fire search queries, parse results, score signals, persist to DB.
     Returns list of new/updated signal dicts.
     """
+    found = []
+    seen_urls: set[str] = set()
+
+    try:
+        logger.info("[SIGNAL] Running signal detector (expansion/leadership/vacancy)")
+        detector_signals = discover_all_signals(companies=extra_companies, include_hidden_db=False)
+        for signal_type, signals in detector_signals.items():
+            for sig in signals:
+                sig_dict = {
+                    "id": str(uuid.uuid4()),
+                    "signal_strength": sig.get("signal_strength", "MEDIUM"),
+                    "company": sig.get("company", ""),
+                    "person": sig.get("contact_name", ""),
+                    "title": sig.get("contact_title", ""),
+                    "post_date": sig.get("detected_at", ""),
+                    "post_url": sig.get("source_url", ""),
+                    "hiring_language": sig.get("signal_type", ""),
+                    "cta": sig.get("hiring_cta", ""),
+                    "role_mentioned": sig.get("probable_role", ""),
+                    "location_mentioned": sig.get("location", ""),
+                    "relevance_score": sig.get("confidence_score", 50),
+                    "why_relevant": sig.get("reasoning", ""),
+                    "message_to_send": sig.get("outreach_draft", ""),
+                    "status": "Not reviewed",
+                    "notes": f"Detector: {signal_type}",
+                    "raw_snippet": sig.get("evidence_text", "")[:500],
+                    "discovered_at": sig.get("detected_at") or datetime.now().isoformat(),
+                    "source": "signal_detector",
+                }
+                url = sig_dict.get("post_url", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    upsert_signal(sig_dict)
+                    found.append(sig_dict)
+                    logger.info(
+                        "[SIGNAL DETECTOR] %s (%d) — %s",
+                        sig_dict["signal_strength"],
+                        sig_dict["relevance_score"],
+                        sig_dict.get("company") or "(unknown)",
+                    )
+    except Exception as exc:
+        logger.warning("[SIGNAL] Signal detector failed: %s", exc)
+
+    # Then run DuckDuckGo search queries
     queries = list(_BASE_QUERIES)
     if extra_companies:
         queries.extend(_build_company_queries(extra_companies))
 
     queries = queries[:max_queries]
     total = len(queries)
-    found = []
-    seen_urls: set[str] = set()
 
-    logger.info("[SIGNAL] Starting hidden opportunity discovery — %d queries", total)
+    logger.info("[SIGNAL] Running DuckDuckGo search — %d queries", total)
 
     for i, query in enumerate(queries):
         logger.info("[SIGNAL] Query %d/%d: %s", i + 1, total, query[:80])
@@ -648,6 +692,7 @@ def run_signal_discovery(
             results = []
 
         for r in results:
+            url = r.get("url", "")
             if not url or url in seen_urls:
                 continue
             seen_urls.add(url)
@@ -762,8 +807,17 @@ def push_signals_to_outreach(
         if post_quote:
             why = f'Post: "{post_quote}" | ' + why
 
+        try:
+            from storage.opportunity_store import get_opportunity_store
+            get_opportunity_store().upsert_from_signal(sig)
+        except Exception:
+            pass
+
         row = {
             "id": str(uuid.uuid4()),
+            "opportunity_id": sig.get("opportunity_id") or "",
+            "Waterfall level": "1",
+            "IPS score": "",
             "Company": company,
             "Company category": "Signal — " + signal_strength,
             "Company priority score": min(10, relevance // 10),

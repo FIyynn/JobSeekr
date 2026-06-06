@@ -30,6 +30,84 @@ def reload_applicant_requirements_text() -> str:
     APPLICANT_REQUIREMENTS_TEXT = get_requirements_for_scorer()
     return APPLICANT_REQUIREMENTS_TEXT
 
+
+# Full candidate profile for LLM-based outreach personalization (connection notes,
+# InMail drafts, referral requests). Synthesized from APPLICANT_REQUIREMENTS_TEXT,
+# TARGET_ROLE_FAMILIES, PREFERRED_LOCATIONS, and TIER_1_TARGET_COMPANIES.
+PROFILE_FULL = """\
+# Candidate Profile — Rashed Alneyadi
+
+## Identity
+Rashed Ahmed Alneyadi is an Emirati (UAE National) early-career quantitative researcher
+and technical founder based in Abu Dhabi. He is fluent in Arabic and English and
+positions strongly for UAE/GCC sovereign-backed, government-linked, and national
+development roles where an Emirati profile is an advantage.
+
+## Education
+- BA Mathematics, Computer Science minor — New York University, New York (NYU New York), Dec 2024
+- NYU Abu Dhabi (NYUAD): Quantum Computation Research Assistant (research only; degree from NYU New York)
+- MIT Media Lab / MBRSC-linked space robotics exposure
+
+## Target Roles (priority order)
+1. **Investment analyst** — sovereign wealth, private equity, venture capital, asset management,
+   portfolio analysis, corporate development, M&A, family offices
+2. **Quant** — quantitative researcher/analyst/trader, systematic trading, market risk,
+   derivatives, portfolio analytics, hedge funds, prop trading
+3. **AI engineer** — machine learning engineer, applied scientist, research engineer,
+   data scientist, AI product analyst
+4. **Strategy** — strategy analyst, government/economic development, chief of staff,
+   founder associate, innovation analyst, corporate strategy
+
+Secondary interests: space/defense/geospatial, energy/commodities, fintech,
+climate/carbon markets, technical product, cybersecurity.
+
+Appropriate levels: analyst, associate, graduate, junior, researcher, trainee,
+rotational/graduate development programs, Emiratization programs.
+
+## Geography
+Priority: Abu Dhabi, Dubai, DIFC, ADGM, UAE, Sharjah, GCC (Qatar/Doha, Saudi/Riyadh,
+Bahrain, Kuwait). Willing to relocate within UAE and GCC. International only if elite
+and highly relevant.
+
+## Key Strengths
+- Mathematics + quantitative modeling + statistics
+- Python, MATLAB, Excel, data analysis, automation, backtesting research prototypes
+- Investment research: ADIA (private equity research), ADIC (active investment analytics)
+- Space robotics optimization, geospatial/defense-adjacent research
+- Quantum computation research workflows
+- Founder/operator: software, cybersecurity, climate-tech, product building, GTM
+- Bilingual (Arabic/English); high-agency builder — not a generic business graduate
+
+## Positioning for Outreach
+Lead with: Emirati NYU mathematics graduate + ADIA/ADIC experience + quant/AI/software
+research background. Emphasize analytical depth, technical execution, and turning research
+into practical systems. Do not claim live professional trading; describe DIBA/backtesting
+as research prototype experience. No master's degree — do not over-penalize unless mandatory.
+
+## Compensation Trajectory
+Target 35,000+ AED/month by Year 2; ideal path 35k–45k AED/month within 2–4 years.
+Minimum acceptable ~27,000 AED/month. Elite graduate/analyst programs worth pursuing even
+if salary is unlisted.
+
+## Tier-1 Target Companies
+Mubadala, Mubadala Capital, ADQ, EIA, Lunate, Chimera, Invest AD, ICD,
+G42, Core42, M42, AI71, Space42, Presight, TII, MBZUAI,
+EDGE Group, Bayanat, Yahsat, Thuraya, MBRSC, UAE Space Agency,
+ADNOC, ADNOC Trading, Masdar,
+Brevan Howard, Millennium, Point72, Squarepoint, BAM/Balyasny, Schonfeld,
+ExodusPoint, Verition, Qube Research & Technologies,
+McKinsey, Oliver Wyman, KKR, Partners Group, PIF, QIA, Hub71,
+Abu Dhabi Catalyst Partners.
+
+ADIA and ADIC are active targets (not blocked).
+
+## Outreach Voice
+- First person ("I" / "my"); sign off as Rashed
+- Concise, specific, low-pressure; ask for advice or the right team/contact
+- Weave in 1–2 credential highlights relevant to the recipient's function
+- Connection notes ≤300 characters when required
+"""
+
 # ── Geography ──────────────────────────────────────────────────────────────────
 PREFERRED_LOCATIONS = [
     "Abu Dhabi", "Dubai", "DIFC", "ADGM", "UAE", "United Arab Emirates",

@@ -12,6 +12,9 @@ _ENGINE_DEFAULTS = {
     "easy_apply_max_hours": 24,
     "easy_apply_max_applicants": 50,
     "warm_lead_referral_threshold": 70,
+    "referral_block_hours": 72,
+    "hidden_market_enabled": 1,
+    "waterfall_auto_draft": 1,
 }
 
 

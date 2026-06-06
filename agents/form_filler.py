@@ -426,8 +426,8 @@ def _vision_fill_form(page, job: dict, qa: dict, profile: str,
         f"Identify ALL visible text inputs, email fields, phone fields, dropdowns, and textareas.\n"
         f"For each field, provide the pixel coordinates of its center and the value to fill.\n"
         f"Return ONLY a valid JSON array. Example:\n"
-        f'[{{"field":"First Name","x":320,"y":240,"value":"Rashed"}},'
-        f'{{"field":"Email","x":320,"y":300,"value":"raa9917@nyu.edu"}}]\n'
+        f'[{{"field":"First Name","x":320,"y":240,"value":"{qa.get("first_name", "Candidate")}"}},'
+        f'{{"field":"Email","x":320,"y":300,"value":"{qa.get("email", "")}"}}]\n'
         f"Viewport is 1440x900. Return ONLY the JSON array, nothing else."
     )
     try:

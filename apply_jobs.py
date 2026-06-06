@@ -41,24 +41,13 @@ LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD", "").strip()
 BASE = Path(__file__).parent
 EASY_APPLY_CSV = BASE / "data" / "easy_apply_jobs.csv"
 EASY_APPLY_TEMP_LIST = Path(tempfile.gettempdir()) / "jobhuntrr_easy_apply_urls.csv"
-RESUME_BY_ANGLE = {
-    "quant": str(BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "investments": str(BASE / "resumes" / "Resume_Rashed_Quant_Investment.pdf"),
-    "ai": str(BASE / "resumes" / "Resume_Rashed_AI_DataScience.pdf"),
-    "cyber": str(BASE / "resumes" / "Resume_Rashed_Tech_Startup.pdf"),
-}
-DEFAULT_RESUME = str(BASE / "Rashed_Alneyadi_Resume.pdf")
-
-
 def _pick_resume(angle: str) -> str:
     """Always use profile_settings resume unless user approved a tailored variant."""
-    from config.apply_agent_rules import get_resume_path
+    from config.apply_agent_rules import get_resume_path, pick_resume_by_angle
     path = get_resume_path()
     if path and Path(path).exists():
         return path
-    key = (angle or "").lower().split("/")[0].strip()
-    path = RESUME_BY_ANGLE.get(key, DEFAULT_RESUME)
-    return path if Path(path).exists() else DEFAULT_RESUME
+    return pick_resume_by_angle(angle)
 
 
 from agents.apply_method import is_linkedin_easy_apply as _is_linkedin_easy_apply
@@ -258,6 +247,26 @@ def _refresh_easy_apply_csv(
     return allowlist
 
 
+def _jobs_from_opportunity_queue(*, gcc_only: bool = False, limit: int = 0) -> list[dict]:
+    """Primary Easy Apply source: jobs with recommended_action=apply_now."""
+    from agents.unified_engine import enrich_job_with_engine, job_eligible_for_auto_apply
+
+    store = get_store()
+    queue = store.fetch_action_queue(gcc_only=gcc_only, limit=500)
+    jobs = []
+    for row in queue:
+        if row.get("recommended_action") != "apply_now":
+            continue
+        if not _is_linkedin_easy_apply(row):
+            continue
+        enrich_job_with_engine(row)
+        if job_eligible_for_auto_apply(row):
+            jobs.append(row)
+    if limit > 0:
+        jobs = jobs[:limit]
+    return jobs
+
+
 def _prepare_easy_apply_jobs(
     *,
     gcc_only: bool = False,
@@ -267,11 +276,15 @@ def _prepare_easy_apply_jobs(
     auto_search_if_empty: bool = True,
 ) -> list[dict]:
     """
-    Easy Apply runs scan data/easy_apply_jobs.csv row-by-row.
-
-    Search populates/refreshes the CSV. Apply reads action=apply rows only,
-    resolving each URL against jobs already stored from search (no placeholders).
+    Easy Apply queue from opportunity action queue (recommended_action=apply_now),
+    then CSV scan as export/view fallback.
     """
+    jobs = _jobs_from_opportunity_queue(gcc_only=gcc_only, limit=limit)
+    if jobs:
+        _write_easy_apply_temp_list(jobs)
+        print(f"Easy Apply: {len(jobs)} job(s) from opportunity action queue")
+        return jobs
+
     jobs = _resolve_jobs_from_easy_apply_csvs(gcc_only=gcc_only)
     if jobs:
         print(f"Easy Apply: {len(jobs)} job(s) queued from CSV scan")
@@ -524,6 +537,23 @@ def run_apply_batch(dry_run: bool = True, gcc_only: bool = False, limit: int = 0
     for job in jobs:
         job["_resume_path"] = _pick_resume(job.get("positioning_angle", "investments"))
         job["job_id"] = job.get("id") or job.get("job_id")
+
+        # Run resume optimizer to get ATS match score
+        try:
+            from engine.resume_optimizer import optimize_resume_for_job
+            result = optimize_resume_for_job(job, resume_path=job["_resume_path"])
+            job["_resume_optimization"] = result
+            ats_score = result["ats_score_estimate"]
+            job["ats_match_score"] = ats_score
+            if ats_score < 60:
+                logger.info(
+                    "  [ATS] Low match score (%d/100) for %s @ %s",
+                    ats_score,
+                    job.get("title", ""),
+                    job.get("company", ""),
+                )
+        except Exception as exc:
+            logger.debug("ATS match scoring failed for %s: %s", job.get("title"), exc)
 
     qa = {**APPLICATION_QA}
     results = apply_jobs_batch(
