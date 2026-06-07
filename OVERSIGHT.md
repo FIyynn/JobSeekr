@@ -47,6 +47,16 @@ _Last updated: 2026-06-06 17:10 by Claude (architect layer) — post GUI visual 
 - **Solution:** Modified `gui/jobhunter_gui.py` line 199 to display "1" when outreach_level is 0 or NULL
 - **Result:** Action Queue Lvl column now shows "1" as default instead of blank
 
+### BUG 4 — MEDIUM: "Queue outreach" result invisible in LinkedIn DM tab
+**Found:** 2026-06-06 manual GUI test by Claude (architect)
+**Symptom:** Clicking "Queue outreach (selected)" in Action Queue confirms "Queued 1 outreach attempts. Check LinkedIn DM tab." — but nothing new appears in the LinkedIn DM tab after clicking Reload.
+**Root cause:** `queue_outreach_for_job()` → `waterfall_runner` writes to `opportunity_store.outreach_attempts`. The LinkedIn DM tab Outreach list reads from `agents/linkedin_outreach.py`'s separate CSV/row-based store (`merge_rows()`). These are two completely separate backends with no bridge.
+**Fix required (Task 20):** In `gui/jobhunter_gui.py`, the LinkedIn DM tab reload (`reload_dm_tab()` or equivalent) should ALSO pull from `opportunity_store.get_pending_outreach_attempts()` and inject those rows into the Outreach table. Alternatively, `_aq_queue_outreach()` should call `merge_rows()` after `queue_outreach_for_job()` so the entry appears immediately in the CSV store.
+**Impact:** HIGH usability — the primary outreach path (Queue → DM tab → send) is broken end-to-end.
+
+### NOTE: GUI restart needed to see Bug 2 + Bug 3 fixes
+Tasks 8 and 9 (UTF-8 encoding fix + Lvl default) were applied to gui/jobhunter_gui.py by Claude Code. The currently running GUI instance still shows the old behavior. Close and reopen the GUI to verify both fixes.
+
 ---
 
 ## ✅ Confirmed Working (GUI test)
@@ -154,11 +164,107 @@ Do NOT invent features — only document what actually exists in the code.
 
 ---
 
+## 🔜 Spec Compliance Gap Tasks (from architect audit 2026-06-06)
+
+### Task 20 — HIGH: Fix Bug 4 — Queue outreach → LinkedIn DM tab disconnect
+```
+Read gui/jobhunter_gui.py and find _aq_queue_outreach() (in the Action Queue tab).
+After calling queue_outreach_for_job(job, profile=PROFILE_FULL), also call:
+  from agents.linkedin_outreach import merge_rows
+  merge_rows([{
+      "Company": job.get("company", ""),
+      "Person name": f"Queued from Action Queue — {job.get('title', '')}",
+      "Person title": "",
+      "LinkedIn URL": job.get("job_url") or job.get("job_url_direct") or "",
+      "Person category": "Action Queue Referral",
+      "Why this person": job.get("fit_reason") or "",
+      "LinkedIn connection message": "",
+      "Outreach status": "Not sent",
+      "Notes": f"[Action Queue] SPS={job.get('sps','')} action={job.get('recommended_action','')}",
+  }])
+This bridges the gap so queued outreach appears immediately in the LinkedIn DM tab.
+After implementing: restart the GUI, queue a job from Action Queue, reload LinkedIn DM tab, verify the new row appears.
+```
+
+### Task 14 — HIGH: Add SPS ≥ 70 gate to Level 4 InMail
+```
+Read agents/unified_engine.py, find plan_outreach_waterfall().
+The current Level 4 condition is: `elif ips >= cfg.get("ips_inmail_threshold", 75):`
+Change it to ALSO require SPS ≥ 70:
+  sps = job.get("sps") or 0
+  elif ips >= cfg.get("ips_inmail_threshold", 75) and sps >= cfg.get("sps_inmail_min", 70):
+Add "sps_inmail_min": 70 to ENGINE_CONFIG in config/engine_config.py.
+Verify with a unit test: job with IPS=80 but SPS=65 should NOT get Level 4.
+```
+
+### Task 15 — HIGH: Add funding/Series B expansion signal queries
+```
+Read engine/signal_detector.py, find discover_expansion_signals().
+It currently just calls run_signal_discovery() with generic queries.
+Instead, add specific expansion-signal queries BEFORE calling run_signal_discovery().
+Import and call run_signal_discovery with extra_companies PLUS inject these targeted queries
+into hidden_opportunity_discovery._BASE_QUERIES (or pass them as a new param):
+  'site:linkedin.com/posts "Series B" "Abu Dhabi" OR "Dubai" hiring'
+  'site:linkedin.com/posts "raised" "funding" "UAE" expansion'
+  'site:linkedin.com/posts "new office" "Abu Dhabi" OR "ADGM" OR "DIFC"'
+  'site:linkedin.com/posts "government contract" OR "strategic partnership" UAE'
+  'site:linkedin.com/posts "acquisition" "Abu Dhabi" team hiring'
+Also add a helper that generates a basic "hiring_forecast" field on expansion signals:
+  sig["hiring_forecast"] = f"Expansion signal at {sig['company']} — probable new headcount in next 90 days"
+  sig["probable_departments"] = sig.get("role_mentioned") or "Quant / AI / Strategy"
+```
+
+### Task 16 — MEDIUM: Add Jobvite to ATS detection
+```
+Read agents/form_filler.py, find _detect_platform().
+Add Jobvite URL detection:
+  if "jobs.jobvite.com" in u or "jobvite.com/careers" in u:
+      return "ai_driven"  # fallback to generic until dedicated handler built
+Also add "jobvite.com" to _ATS_HOST_FRAGMENTS list.
+This ensures Jobvite jobs are tracked/detected even without a dedicated form handler.
+```
+
+### Task 17 — MEDIUM: PDF resume generation
+```
+Read engine/resume_optimizer.py.
+The function currently saves to data/tailored_resumes/tailored_{job_id}.txt
+Add a PDF export step after the .txt file is written:
+  1. pip install fpdf2 --break-system-packages (if not installed)
+  2. After writing .txt, call a new _export_pdf(text_path, job_id) function that:
+     - Reads the .txt content
+     - Creates a simple PDF with fpdf2: A4, Helvetica font, line-wrapped content
+     - Saves to data/tailored_resumes/tailored_{job_id}.pdf
+  3. Return the PDF path as the primary output (keep .txt as fallback)
+Make it non-breaking: if fpdf2 not available, log a warning and return .txt path as before.
+```
+
+### Task 18 — MEDIUM: Hiring forecast field on all signal types
+```
+Read agents/hidden_opportunity_discovery.py, find _parse_result_to_signal().
+Add two new fields to every signal dict:
+  "hiring_forecast": f"Signal detected at {company or 'unknown'} — likely hiring in {role or 'analyst/strategy'} within 60 days"
+  "probable_departments": role or "Investment / Strategy / AI"
+Also update the signals table in _get_conn() to add these columns if not exist:
+  ALTER TABLE signals ADD COLUMN hiring_forecast TEXT DEFAULT '';
+  ALTER TABLE signals ADD COLUMN probable_departments TEXT DEFAULT '';
+And update upsert_signal() to save them.
+```
+
+### Task 19 — Regression test + git commit
+```
+Run: python -m pytest tests/ -v --tb=short
+All 18 tests must pass.
+Then: git add -A && git commit -m "Spec compliance fixes: InMail SPS gate, expansion queries, Jobvite detection, PDF resume, hiring forecast fields"
+Update OVERSIGHT.md and SYSTEM_STATE.md to mark Tasks 14-19 complete.
+```
+
+---
+
 ## Instructions for Claude Code
 
 READ THIS FILE FIRST every session before doing anything.
-Start with Task 7 (SPS/IPS fix) — it's the most impactful bug.
-Do NOT re-run Tasks 1-6 — they are verified done.
+Tasks 1-13 are DONE. Start with Task 14.
+Do NOT re-run Tasks 1-13 — they are verified done.
 After each task: update OVERSIGHT.md with result, then proceed to next.
 
 **Communicate bugs back to me:** Add to the "Bugs found" section above.
