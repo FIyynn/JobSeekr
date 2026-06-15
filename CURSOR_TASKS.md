@@ -12,7 +12,7 @@ Migration requires shell execution which is blocked in non-interactive mode. Use
 
 ## Task 004
 
-**status: PENDING**
+**status: DONE**
 
 ### Goal
 Add a `warm_lead_score` field to the outreach table in `storage/opportunity_store.py` and expose it in `engine/warm_lead.py`.
