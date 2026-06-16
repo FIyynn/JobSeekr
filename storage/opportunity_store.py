@@ -107,11 +107,18 @@ class OpportunityStore:
                     attempted_at TEXT DEFAULT '',
                     response_at TEXT DEFAULT '',
                     notes TEXT DEFAULT '',
+                    warm_lead_score REAL DEFAULT 0.0,
                     created_at TEXT DEFAULT '',
                     updated_at TEXT DEFAULT '',
                     FOREIGN KEY (opportunity_id) REFERENCES opportunities(id)
                 )
             """)
+            try:
+                conn.execute(
+                    "ALTER TABLE outreach_attempts ADD COLUMN warm_lead_score REAL DEFAULT 0.0"
+                )
+            except Exception:
+                pass
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_opp_action ON opportunities(recommended_action)"
             )
