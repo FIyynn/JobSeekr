@@ -1,0 +1,78 @@
+{
+  "source": "linkedin",
+  "index": 1,
+  "selected_indexes": [
+    1
+  ],
+  "warnings": [],
+  "items": [
+    {
+      "index": 1,
+      "clicked": {
+        "index": 1,
+        "job_id": "4425714833"
+      },
+      "listing": {
+        "link": "https://www.linkedin.com/jobs/view/4425714833/?eBP=NON_CHARGEABLE_CHANNEL&refId=%2BmIa4T5POQMr9BBTNOGong%3D%3D&trackingId=r1KX8eWSgt9GIONHgcZGIQ%3D%3D&trk=flagship3_search_srp_jobs",
+        "job_id": "4425714833",
+        "easy_apply": true,
+        "listed_on": "2026-06-14T06:23:45.072140+00:00"
+      },
+      "detail": {
+        "listing_url": "/jobs/view/4425714833/?alternateChannel=search&eBP=NON_CHARGEABLE_CHANNEL&refId=%2BmIa4T5POQMr9BBTNOGong%3D%3D&trackingId=r1KX8eWSgt9GIONHgcZGIQ%3D%3D&trk=d_flagship3_search_srp_jobs",
+        "job_id": "4425714833",
+        "company_url": "/company/think-first-academy/life/",
+        "apply_button_xpath": ".//button[contains(@class, 'jobs-apply-button')]",
+        "save_button_xpath": ".//button[contains(@class, 'jobs-save-button')]",
+        "company_logo_url": "https://media.licdn.com/dms/image/v2/D4D0BAQG4QtrFCU-3gg/company-logo_100_100/B4DZfzENg6GsAQ-/0/1752129657361/think_first_academy_logo?e=1782950400&v=beta&t=_NVomI_tAKe5gDnh6dkqTQSYYUnNYdewARVCs4NScnM",
+        "company_profile": {
+          "url": "/company/think-first-academy/life/",
+          "company_logo_url": "https://media.licdn.com/dms/image/v2/D4D0BAQG4QtrFCU-3gg/company-logo_100_100/B4DZfzENg6GsAQ-/0/1752129657361/think_first_academy_logo?e=1782950400&v=beta&t=_NVomI_tAKe5gDnh6dkqTQSYYUnNYdewARVCs4NScnM"
+        }
+      }
+    }
+  ],
+  "ai": {
+    "items": [
+      {
+        "listing": {
+          "title": "Administrative Assistant",
+          "company": "Think First Academy",
+          "location": "Dubai, United Arab Emirates (On-site)",
+          "job_id": "4425714833",
+          "promoted": false,
+          "easy_apply": true,
+          "listed_on": "2026-06-14T06:23:45.072140+00:00"
+        },
+        "detail": {
+          "job_id": "4425714833",
+          "title": "Administrative Assistant",
+          "company": "Think First Academy",
+          "location": "Dubai, United Arab Emirates",
+          "posted_at": "2 hours ago",
+          "apply_activity": "Over 100 applicants",
+          "promotion_status": "Promoted by hirer",
+          "application_management": "",
+          "response_insights": "No response insights available yet",
+          "listing_preferences": [
+            "On-site",
+            "Full-time"
+          ],
+          "missing_required_qualifications": true,
+          "missing required qualifications?": true,
+          "company_profile": {
+            "name": "Think First Academy",
+            "followers": "5,440 followers",
+            "industry": "Education Administration Programs",
+            "size": "11-50 employees",
+            "linkedin_employee_count": "16 on LinkedIn",
+            "description": "Think First Academy is a prominent educational institution based in Dubai since 2016, dedicated to providing comprehensive support and services to the Chinese community in the region who are eager to enhance their English language skills and achieve their academic or professional goals.\nAt Think First Academy our mission to empower members of the Chinese community in Dubai... "
+          },
+          "hiring_team": [],
+          "job_description": "Company Description\nThink First Academy is a KHDA-approved educational institution in Dubai, specialising in international education pathways, language development, and academic support programmes. Since 2016, the Academy has been committed to helping students achieve success in internationally recognised qualifications and university progression pathways...\n\nJob Responsibilities:\nPerform general office administrative duties...\nAssist with staff and teacher payroll calculations...\nSupport student admissions, school applications, and follow-up communications...\nMaintain accurate student records...\nDevelop proficiency in CRM and student information management systems...\nProvide administrative support for academic programmes, examinations, events, and day-to-day school operations...\n\nRequirements:\nPrior experience in administration or a related role is preferred.\nStrong organizational and time management skills.\nProficiency in Microsoft Office (Excel, Word) and ability to learn new systems.\nExcellent attention to detail and problem-solving abilities.\nGood communication skills and ability to coordinate with different teams.",
+          "raw_text": "Think First Academy Share Show more options Administrative Assistant Dubai, United Arab Emirates Â· 2 hours ago Â· Over 100 applicants Promoted by hirer Â· No response insights available yet On-site Full-time Easy Apply Save Save Administrative Assistant at Think First Academy..."
+        }
+      }
+    ]
+  }
+}

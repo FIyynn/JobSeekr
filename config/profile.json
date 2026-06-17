@@ -1,0 +1,16 @@
+{
+  "app_name": "JobSeekr Fresh",
+  "data_dir": "runtime",
+  "mongo_file": "runtime/mongo_store.json",
+  "linkedin": {
+    "jobs_search_url": "https://www.linkedin.com/jobs/search"
+  },
+  "browser": {
+    "headless": false,
+    "use_stealth": true,
+    "page_load_timeout_seconds": 45,
+    "wait_timeout_seconds": 20,
+    "start_maximized": true,
+    "user_data_dir": "runtime/chrome_user_data"
+  }
+}

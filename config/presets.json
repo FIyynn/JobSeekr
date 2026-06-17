@@ -1,0 +1,34 @@
+{
+  "default": {
+    "keyword": "",
+    "location": "",
+    "filter_by": "Jobs",
+    "filters": []
+  },
+  "linkedin_jobs_clean": {
+    "filter_by": "Jobs",
+    "filters": [
+      {
+        "section": "Sort by",
+        "type": "radio",
+        "input": "Most recent"
+      },
+      {
+        "section": "Date posted",
+        "type": "radio",
+        "input": "Past week"
+      },
+      {
+        "section": "Experience level",
+        "type": "checkbox",
+        "inputs": [
+          {
+            "name": "Entry level",
+            "state": true
+          }
+        ]
+      }
+    ]
+  }
+}
+
