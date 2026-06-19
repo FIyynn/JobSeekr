@@ -24,10 +24,16 @@ def build_driver(
     if browser_config.get("start_maximized", True):
         options.add_argument("--start-maximized")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-extensions")
     options.add_argument("--no-first-run")
     options.add_argument("--no-default-browser-check")
     options.add_argument("--disable-popup-blocking")
+    extensions = browser_config.get("extensions") or []
+    if extensions:
+        resolved_extensions = [
+            str(Path(extension).expanduser().resolve())
+            for extension in extensions
+        ]
+        options.add_argument(f"--load-extension={','.join(resolved_extensions)}")
     user_data_dir = profile_dir or browser_config.get("user_data_dir")
     if user_data_dir:
         resolved_user_data_dir = Path(user_data_dir).expanduser().resolve()

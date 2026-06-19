@@ -169,23 +169,37 @@ def set_location_input(
 
 
 def open_all_filters_menu(driver, delay_seconds: float | int = 1, verbose: bool = True) -> dict[str, Any]:
+    started_at = time.perf_counter()
+    _sync_log(verbose, "filters: open menu start")
     modal_elements = driver.find_elements(By.CSS_SELECTOR, FILTER_MODAL_SELECTOR)
     if any(element.is_displayed() for element in modal_elements):
+        _sync_log(verbose, "filters: open menu already open", started_at)
         return {"modal_open": True}
     try:
+        wait_button_at = time.perf_counter()
+        _sync_log(verbose, "filters: open menu wait button")
         button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, ALL_FILTERS_SELECTOR))
         )
+        _sync_log(verbose, "filters: open menu button ready", wait_button_at)
+        click_at = time.perf_counter()
+        _sync_log(verbose, "filters: open menu click")
         button.click()
+        _sync_log(verbose, "filters: open menu clicked", click_at)
+        wait_modal_at = time.perf_counter()
+        _sync_log(verbose, "filters: open menu wait modal")
         WebDriverWait(driver, 10).until(
             lambda d: any(
                 element.is_displayed()
                 for element in d.find_elements(By.CSS_SELECTOR, FILTER_MODAL_SELECTOR)
             )
         )
+        _sync_log(verbose, "filters: open menu modal ready", wait_modal_at)
         _vlog(verbose, "filters: open ok")
+        _sync_log(verbose, "filters: open menu done", started_at)
         return {"modal_open": True}
     except Exception as exc:
+        _sync_log(verbose, "filters: open menu failed", started_at)
         raise RuntimeError("Could not open the all filters panel") from exc
 
 
@@ -198,6 +212,25 @@ def _ensure_all_filters_menu_open(driver, delay_seconds: float | int = 1, verbos
 
 def _fast_filters_snapshot(driver, verbose: bool = True) -> dict[str, Any]:
     return read_filters_state(driver, verbose=verbose, ensure_open=False, include_filter_by_options=False)
+
+
+def _filters_scope(driver, verbose: bool = True):
+    modal_elements = driver.find_elements(By.CSS_SELECTOR, FILTER_MODAL_SELECTOR)
+    for element in modal_elements:
+        try:
+            if element.is_displayed():
+                return element
+        except Exception:
+            continue
+    return driver
+
+
+def _section_block_in_scope(scope, section_name: str, verbose: bool = True):
+    target = _normalize(section_name)
+    for block in _section_blocks(scope, verbose=verbose):
+        if _normalize(_section_title(block, verbose=verbose)) == target or _normalize(_section_legend(block, verbose=verbose)) == target:
+            return block
+    return None
 
 
 def _parse_result_type_from_trigger_text(text: str, verbose: bool = True) -> str | None:
@@ -402,17 +435,31 @@ def read_filters_state(
     ensure_open: bool = True,
     include_filter_by_options: bool = True,
 ) -> dict[str, Any]:
+    started_at = time.perf_counter()
+    _sync_log(verbose, "filters: read start")
     if ensure_open:
+        ensure_at = time.perf_counter()
+        _sync_log(verbose, "filters: read ensure open")
         _ensure_all_filters_menu_open(driver, verbose=verbose)
+        _sync_log(verbose, "filters: read ensure open done", ensure_at)
+    trigger_at = time.perf_counter()
+    _sync_log(verbose, "filters: read trigger wait")
     trigger = _wait(driver, RESULT_TYPE_TRIGGER_SELECTOR, verbose=verbose)
+    _sync_log(verbose, "filters: read trigger ready", trigger_at)
+    parse_type_at = time.perf_counter()
+    _sync_log(verbose, "filters: read type parse")
     selected = _parse_result_type_from_trigger_text(trigger.get_attribute("aria-label") or trigger.text)
+    _sync_log(verbose, "filters: read type parsed", parse_type_at)
     options: list[str] = []
     if include_filter_by_options:
         try:
+            options_at = time.perf_counter()
+            _sync_log(verbose, "filters: read type options open")
             trigger.click()
             menu = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "ul.search-advanced-filter__navigation-container"))
             )
+            _sync_log(verbose, "filters: read type options ready", options_at)
             for item in menu.find_elements(By.CSS_SELECTOR, "[role='button']"):
                 label = item.get_attribute("aria-label") or item.text
                 label = re.sub(r"^Show only results of type:\s*", "", label, flags=re.IGNORECASE)
@@ -425,13 +472,21 @@ def read_filters_state(
                     trigger.click()
             except Exception:
                 pass
+    else:
+        _vlog(verbose, "filters: read type options skip")
 
     filters: list[dict[str, Any]] = []
-    for block in _section_blocks(driver, verbose=verbose):
+    sections_at = time.perf_counter()
+    _sync_log(verbose, "filters: read sections start")
+    scope = _filters_scope(driver, verbose=verbose)
+    _vlog(verbose, f"filters: read scope {'modal' if scope is not driver else 'driver'}")
+    for block in _section_blocks(scope, verbose=verbose):
+        section_started_at = time.perf_counter()
         section_name = _section_title(block, verbose=verbose)
         label_name = _section_legend(block, verbose=verbose)
         input_nodes = block.find_elements(By.CSS_SELECTOR, "input")
         button_nodes = block.find_elements(By.CSS_SELECTOR, "button[aria-pressed]")
+        _sync_log(verbose, f"filters: read section start {section_name or 'unknown'}")
 
         if button_nodes:
             items = []
@@ -449,6 +504,7 @@ def read_filters_state(
                     "inputs": items,
                 }
             )
+            _sync_log(verbose, f"filters: read section done {section_name or 'unknown'}", section_started_at)
             continue
 
         if input_nodes:
@@ -481,6 +537,7 @@ def read_filters_state(
                     "inputs": items,
                 }
             )
+            _sync_log(verbose, f"filters: read section done {section_name or 'unknown'}", section_started_at)
             continue
 
         filters.append(
@@ -490,16 +547,16 @@ def read_filters_state(
                 "inputs": [],
             }
         )
+        _sync_log(verbose, f"filters: read section done {section_name or 'unknown'}", section_started_at)
 
+    _sync_log(verbose, "filters: read sections done", sections_at)
+    _sync_log(verbose, "filters: read done", started_at)
     return {"filter_by": {"selected": selected or "Jobs", "options": options}, "filters": filters}
 
 
 def _find_section_block(driver, section_name: str, verbose: bool = True):
-    target = _normalize(section_name)
-    for block in _section_blocks(driver, verbose=verbose):
-        if _normalize(_section_title(block, verbose=verbose)) == target or _normalize(_section_legend(block, verbose=verbose)) == target:
-            return block
-    return None
+    scope = _filters_scope(driver, verbose=verbose)
+    return _section_block_in_scope(scope, section_name, verbose=verbose)
 
 
 def _click_label_in_block(block, label_text: str, verbose: bool = True) -> bool:
@@ -762,6 +819,7 @@ def sync_filters_state(
 
     desired_sections = _payload_section_lookup(payload, verbose=verbose)
     _sync_log(verbose, f"filters: sections start ({len(current_snapshot.get('filters', []))})")
+    section_scope = _filters_scope(driver, verbose=verbose)
 
     for current_filter in current_snapshot.get("filters", []):
         section = current_filter.get("section", "")
@@ -777,12 +835,13 @@ def sync_filters_state(
                 _vlog(verbose, f"{section}: checkbox clean skip")
                 continue
             _vlog(verbose, f"{section}: checkbox missing target clear {selected_count}")
-        block = _find_section_block(driver, section, verbose=verbose)
+        block = _section_block_in_scope(section_scope, section, verbose=verbose)
         if block is None:
             _sync_log(verbose, f"filters: section retry {section or 'unknown'}")
             retry_at = time.perf_counter()
             _ensure_all_filters_menu_open(driver, delay_seconds=delay_seconds, verbose=verbose)
-            block = _find_section_block(driver, section, verbose=verbose)
+            section_scope = _filters_scope(driver, verbose=verbose)
+            block = _section_block_in_scope(section_scope, section, verbose=verbose)
             _sync_log(verbose, f"filters: section retry done {section or 'unknown'}", retry_at)
         if block is None:
             continue
@@ -852,7 +911,8 @@ def sync_filters_state(
             _sync_log(verbose, f"filters: {section} retry")
             retry_at = time.perf_counter()
             _ensure_all_filters_menu_open(driver, delay_seconds=delay_seconds, verbose=verbose)
-            block = _find_section_block(driver, section, verbose=verbose)
+            section_scope = _filters_scope(driver, verbose=verbose)
+            block = _section_block_in_scope(section_scope, section, verbose=verbose)
             if block is None:
                 continue
             target = desired_sections.get(_normalize(section))
