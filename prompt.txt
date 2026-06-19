@@ -1,78 +1,447 @@
+[2026-06-19T19:03:50+04:00] filters: sync start
+[2026-06-19T19:03:50+04:00] filters: open panel start
+[2026-06-19T19:03:50+04:00] filters: open panel done (+0.01s)
+[2026-06-19T19:03:50+04:00] filters: snapshot start
+[2026-06-19T19:03:51+04:00] filters: snapshot done (+0.22s)
+[2026-06-19T19:03:51+04:00] filters: sections start (17)
+Sort by: radio scan
+[2026-06-19T19:03:51+04:00] filters: Sort by radio start
+[2026-06-19T19:03:51+04:00] filters: Sort by radio done none -> Most recent (+0.24s)
+Date posted: radio scan
+[2026-06-19T19:03:51+04:00] filters: Date posted radio start
+[2026-06-19T19:03:51+04:00] filters: Date posted radio done none -> Past week (+0.25s)
+Experience level: checkbox scan
+Experience level: checkbox state 0/6 -> 1/1
+[2026-06-19T19:03:51+04:00] filters: Experience level checkbox start
+[2026-06-19T19:03:51+04:00] filters: checkbox scan start
+[2026-06-19T19:03:51+04:00] filters: checkbox scan done (+0.14s)
+[2026-06-19T19:03:51+04:00] filters: Experience level checkbox done 0/6 -> 1/1 (+0.16s)
+Company: checkbox scan
+Company: checkbox clean skip
+Job type: checkbox scan
+Job type: checkbox clean skip
+Remote: checkbox scan
+Remote: checkbox clean skip
+Easy Apply: switch scan
+Easy Apply: no target skip
+Has verifications: checkbox scan
+Has verifications: checkbox clean skip
+Location: checkbox scan
+Location: checkbox clean skip
+Industry: checkbox scan
+Industry: checkbox clean skip
+Job function: checkbox scan
+Job function: checkbox clean skip
+Title: checkbox scan
+Title: checkbox clean skip
+Under 10 applicants: checkbox scan
+Under 10 applicants: checkbox clean skip
+In your network: checkbox scan
+In your network: checkbox clean skip
+Fair Chance Employer: checkbox scan
+Fair Chance Employer: checkbox clean skip
+Benefits: checkbox scan
+Benefits: checkbox clean skip
+Commitments: checkbox scan
+Commitments: checkbox clean skip
+[2026-06-19T19:03:51+04:00] filters: final snapshot start
+[2026-06-19T19:03:52+04:00] filters: final snapshot done (+0.19s)
+[2026-06-19T19:03:52+04:00] filters: sync done (+1.16s)
 {
-  "source": "linkedin",
-  "index": 1,
-  "selected_indexes": [
-    1
-  ],
-  "warnings": [],
-  "items": [
+  "filter_by": {
+    "selected": "Jobs",
+    "options": []
+  },
+  "filters": [
     {
-      "index": 1,
-      "clicked": {
-        "index": 1,
-        "job_id": "4425714833"
-      },
-      "listing": {
-        "link": "https://www.linkedin.com/jobs/view/4425714833/?eBP=NON_CHARGEABLE_CHANNEL&refId=%2BmIa4T5POQMr9BBTNOGong%3D%3D&trackingId=r1KX8eWSgt9GIONHgcZGIQ%3D%3D&trk=flagship3_search_srp_jobs",
-        "job_id": "4425714833",
-        "easy_apply": true,
-        "listed_on": "2026-06-14T06:23:45.072140+00:00"
-      },
-      "detail": {
-        "listing_url": "/jobs/view/4425714833/?alternateChannel=search&eBP=NON_CHARGEABLE_CHANNEL&refId=%2BmIa4T5POQMr9BBTNOGong%3D%3D&trackingId=r1KX8eWSgt9GIONHgcZGIQ%3D%3D&trk=d_flagship3_search_srp_jobs",
-        "job_id": "4425714833",
-        "company_url": "/company/think-first-academy/life/",
-        "apply_button_xpath": ".//button[contains(@class, 'jobs-apply-button')]",
-        "save_button_xpath": ".//button[contains(@class, 'jobs-save-button')]",
-        "company_logo_url": "https://media.licdn.com/dms/image/v2/D4D0BAQG4QtrFCU-3gg/company-logo_100_100/B4DZfzENg6GsAQ-/0/1752129657361/think_first_academy_logo?e=1782950400&v=beta&t=_NVomI_tAKe5gDnh6dkqTQSYYUnNYdewARVCs4NScnM",
-        "company_profile": {
-          "url": "/company/think-first-academy/life/",
-          "company_logo_url": "https://media.licdn.com/dms/image/v2/D4D0BAQG4QtrFCU-3gg/company-logo_100_100/B4DZfzENg6GsAQ-/0/1752129657361/think_first_academy_logo?e=1782950400&v=beta&t=_NVomI_tAKe5gDnh6dkqTQSYYUnNYdewARVCs4NScnM"
-        }
-      }
-    }
-  ],
-  "ai": {
-    "items": [
-      {
-        "listing": {
-          "title": "Administrative Assistant",
-          "company": "Think First Academy",
-          "location": "Dubai, United Arab Emirates (On-site)",
-          "job_id": "4425714833",
-          "promoted": false,
-          "easy_apply": true,
-          "listed_on": "2026-06-14T06:23:45.072140+00:00"
+      "section": "Sort by",
+      "type": "radio",
+      "inputs": [
+        {
+          "name": "Most recent",
+          "state": false
         },
-        "detail": {
-          "job_id": "4425714833",
-          "title": "Administrative Assistant",
-          "company": "Think First Academy",
-          "location": "Dubai, United Arab Emirates",
-          "posted_at": "2 hours ago",
-          "apply_activity": "Over 100 applicants",
-          "promotion_status": "Promoted by hirer",
-          "application_management": "",
-          "response_insights": "No response insights available yet",
-          "listing_preferences": [
-            "On-site",
-            "Full-time"
-          ],
-          "missing_required_qualifications": true,
-          "missing required qualifications?": true,
-          "company_profile": {
-            "name": "Think First Academy",
-            "followers": "5,440 followers",
-            "industry": "Education Administration Programs",
-            "size": "11-50 employees",
-            "linkedin_employee_count": "16 on LinkedIn",
-            "description": "Think First Academy is a prominent educational institution based in Dubai since 2016, dedicated to providing comprehensive support and services to the Chinese community in the region who are eager to enhance their English language skills and achieve their academic or professional goals.\nAt Think First Academy our mission to empower members of the Chinese community in Dubai... "
-          },
-          "hiring_team": [],
-          "job_description": "Company Description\nThink First Academy is a KHDA-approved educational institution in Dubai, specialising in international education pathways, language development, and academic support programmes. Since 2016, the Academy has been committed to helping students achieve success in internationally recognised qualifications and university progression pathways...\n\nJob Responsibilities:\nPerform general office administrative duties...\nAssist with staff and teacher payroll calculations...\nSupport student admissions, school applications, and follow-up communications...\nMaintain accurate student records...\nDevelop proficiency in CRM and student information management systems...\nProvide administrative support for academic programmes, examinations, events, and day-to-day school operations...\n\nRequirements:\nPrior experience in administration or a related role is preferred.\nStrong organizational and time management skills.\nProficiency in Microsoft Office (Excel, Word) and ability to learn new systems.\nExcellent attention to detail and problem-solving abilities.\nGood communication skills and ability to coordinate with different teams.",
-          "raw_text": "Think First Academy Share Show more options Administrative Assistant Dubai, United Arab Emirates Â· 2 hours ago Â· Over 100 applicants Promoted by hirer Â· No response insights available yet On-site Full-time Easy Apply Save Save Administrative Assistant at Think First Academy..."
+        {
+          "name": "Most relevant",
+          "state": false
         }
-      }
-    ]
-  }
+      ]
+    },
+    {
+      "section": "Date posted",
+      "type": "radio",
+      "inputs": [
+        {
+          "name": "Any time",
+          "state": false
+        },
+        {
+          "name": "Past month",
+          "state": false
+        },
+        {
+          "name": "Past week",
+          "state": false
+        },
+        {
+          "name": "Past 24 hours",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Experience level",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Internship",
+          "state": false
+        },
+        {
+          "name": "Entry level",
+          "state": false
+        },
+        {
+          "name": "Associate",
+          "state": false
+        },
+        {
+          "name": "Mid-Senior level",
+          "state": false
+        },
+        {
+          "name": "Director",
+          "state": false
+        },
+        {
+          "name": "Executive",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Company",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "JW Marriott",
+          "state": false
+        },
+        {
+          "name": "Parsons Corporation",
+          "state": false
+        },
+        {
+          "name": "SEGULA Technologies",
+          "state": false
+        },
+        {
+          "name": "Le M\u00e9ridien Hotels & Resorts",
+          "state": false
+        },
+        {
+          "name": "Apparel Group",
+          "state": false
+        },
+        {
+          "name": "Vertiv",
+          "state": false
+        },
+        {
+          "name": "Aldar Education",
+          "state": false
+        },
+        {
+          "name": "Confidential",
+          "state": false
+        },
+        {
+          "name": "Innovo Group",
+          "state": false
+        },
+        {
+          "name": "Wynn Al Marjan Island",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Job type",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Full-time",
+          "state": false
+        },
+        {
+          "name": "Contract",
+          "state": false
+        },
+        {
+          "name": "Volunteer",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Remote",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "On-site",
+          "state": false
+        },
+        {
+          "name": "Remote",
+          "state": false
+        },
+        {
+          "name": "Hybrid",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Easy Apply",
+      "type": "switch",
+      "inputs": [
+        {
+          "name": "Toggle Easy Apply filter",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Has verifications",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Toggle Has verifications filter",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Location",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Dubai",
+          "state": false
+        },
+        {
+          "name": "Abu Dhabi",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Industry",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Hospitality",
+          "state": false
+        },
+        {
+          "name": "Civil Engineering",
+          "state": false
+        },
+        {
+          "name": "Engineering Services",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Job function",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Other",
+          "state": false
+        },
+        {
+          "name": "Management",
+          "state": false
+        },
+        {
+          "name": "Manufacturing",
+          "state": false
+        },
+        {
+          "name": "Administrative",
+          "state": false
+        },
+        {
+          "name": "Education",
+          "state": false
+        },
+        {
+          "name": "Engineering",
+          "state": false
+        },
+        {
+          "name": "Marketing",
+          "state": false
+        },
+        {
+          "name": "Public Relations",
+          "state": false
+        },
+        {
+          "name": "Training",
+          "state": false
+        },
+        {
+          "name": "Writing/Editing",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Title",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Manager",
+          "state": false
+        },
+        {
+          "name": "Marketing Manager",
+          "state": false
+        },
+        {
+          "name": "Laboratory Specialist",
+          "state": false
+        },
+        {
+          "name": "Operations Assistant",
+          "state": false
+        },
+        {
+          "name": "Fitness Coach",
+          "state": false
+        },
+        {
+          "name": "Food And Beverage Supervisor",
+          "state": false
+        },
+        {
+          "name": "Receptionist",
+          "state": false
+        },
+        {
+          "name": "Mixologist",
+          "state": false
+        },
+        {
+          "name": "Chef",
+          "state": false
+        },
+        {
+          "name": "Spa Specialist",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Under 10 applicants",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Toggle Under 10 applicants filter",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "In your network",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Toggle In your network filter",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Fair Chance Employer",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Toggle Fair Chance Employer filter",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Benefits",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Medical insurance",
+          "state": false
+        },
+        {
+          "name": "Vision insurance",
+          "state": false
+        },
+        {
+          "name": "Dental insurance",
+          "state": false
+        },
+        {
+          "name": "401(k)",
+          "state": false
+        },
+        {
+          "name": "Pension plan",
+          "state": false
+        },
+        {
+          "name": "Paid maternity leave",
+          "state": false
+        },
+        {
+          "name": "Paid paternity leave",
+          "state": false
+        },
+        {
+          "name": "Commuter benefits",
+          "state": false
+        },
+        {
+          "name": "Student loan assistance",
+          "state": false
+        },
+        {
+          "name": "Tuition assistance",
+          "state": false
+        },
+        {
+          "name": "Disability insurance",
+          "state": false
+        }
+      ]
+    },
+    {
+      "section": "Commitments",
+      "type": "checkbox",
+      "inputs": [
+        {
+          "name": "Career growth and learning",
+          "state": false
+        },
+        {
+          "name": "Environmental sustainability",
+          "state": false
+        },
+        {
+          "name": "Work-life balance",
+          "state": false
+        }
+      ]
+    }
+  ]
 }

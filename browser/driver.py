@@ -37,7 +37,14 @@ def build_driver(
     if binary_path:
         options.binary_location = binary_path
     _vlog(verbose, "driver: launch chrome")
-    driver = uc.Chrome(options=options, use_subprocess=True)
+    chrome_kwargs: dict[str, Any] = {
+        "options": options,
+        "use_subprocess": True,
+    }
+    version_main = browser_config.get("version_main")
+    if version_main is not None:
+        chrome_kwargs["version_main"] = int(version_main)
+    driver = uc.Chrome(**chrome_kwargs)
     driver.set_page_load_timeout(browser_config.get("page_load_timeout_seconds", 45))
     _vlog(verbose, "driver: ready")
     return driver

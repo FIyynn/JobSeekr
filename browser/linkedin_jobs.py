@@ -34,6 +34,21 @@ def _vlog(verbose: bool, message: str) -> None:
         print(message, flush=True)
 
 
+def _stamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _sync_log(verbose: bool, message: str, started_at: float | None = None) -> None:
+    if not verbose:
+        return
+    stamp = _stamp()
+    if started_at is None:
+        print(f"[{stamp}] {message}", flush=True)
+    else:
+        elapsed = time.perf_counter() - started_at
+        print(f"[{stamp}] {message} (+{elapsed:.2f}s)", flush=True)
+
+
 def _wait(driver, selector: str, timeout: int = 20, verbose: bool = True):
     return WebDriverWait(driver, timeout).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, selector))
@@ -106,6 +121,10 @@ def _click_safely(driver, element, delay_seconds: float | int = 0, verbose: bool
     _pause(delay_seconds, verbose=verbose)
 
 
+def _click_fast(driver, element) -> None:
+    driver.execute_script("arguments[0].click();", element)
+
+
 def open_jobs_search_page(
     driver,
     url: str = JOBS_SEARCH_URL,
@@ -152,7 +171,6 @@ def set_location_input(
 def open_all_filters_menu(driver, delay_seconds: float | int = 1, verbose: bool = True) -> dict[str, Any]:
     modal_elements = driver.find_elements(By.CSS_SELECTOR, FILTER_MODAL_SELECTOR)
     if any(element.is_displayed() for element in modal_elements):
-        _pause(delay_seconds, verbose=verbose)
         return {"modal_open": True}
     try:
         button = WebDriverWait(driver, 10).until(
@@ -165,7 +183,6 @@ def open_all_filters_menu(driver, delay_seconds: float | int = 1, verbose: bool 
                 for element in d.find_elements(By.CSS_SELECTOR, FILTER_MODAL_SELECTOR)
             )
         )
-        _pause(delay_seconds, verbose=verbose)
         _vlog(verbose, "filters: open ok")
         return {"modal_open": True}
     except Exception as exc:
@@ -175,9 +192,12 @@ def open_all_filters_menu(driver, delay_seconds: float | int = 1, verbose: bool 
 def _ensure_all_filters_menu_open(driver, delay_seconds: float | int = 1, verbose: bool = True) -> dict[str, Any]:
     modal_elements = driver.find_elements(By.CSS_SELECTOR, FILTER_MODAL_SELECTOR)
     if any(element.is_displayed() for element in modal_elements):
-        _pause(delay_seconds, verbose=verbose)
         return {"modal_open": True}
     return open_all_filters_menu(driver, delay_seconds=delay_seconds, verbose=verbose)
+
+
+def _fast_filters_snapshot(driver, verbose: bool = True) -> dict[str, Any]:
+    return read_filters_state(driver, verbose=verbose, ensure_open=False, include_filter_by_options=False)
 
 
 def _parse_result_type_from_trigger_text(text: str, verbose: bool = True) -> str | None:
@@ -376,29 +396,35 @@ def parse_filters_state(html: str, verbose: bool = True) -> dict[str, Any]:
     return {"filter_by": result_type, "filters": filters}
 
 
-def read_filters_state(driver, verbose: bool = True, ensure_open: bool = True) -> dict[str, Any]:
+def read_filters_state(
+    driver,
+    verbose: bool = True,
+    ensure_open: bool = True,
+    include_filter_by_options: bool = True,
+) -> dict[str, Any]:
     if ensure_open:
         _ensure_all_filters_menu_open(driver, verbose=verbose)
     trigger = _wait(driver, RESULT_TYPE_TRIGGER_SELECTOR, verbose=verbose)
     selected = _parse_result_type_from_trigger_text(trigger.get_attribute("aria-label") or trigger.text)
     options: list[str] = []
-    try:
-        trigger.click()
-        menu = WebDriverWait(driver, 5).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "ul.search-advanced-filter__navigation-container"))
-        )
-        for item in menu.find_elements(By.CSS_SELECTOR, "[role='button']"):
-            label = item.get_attribute("aria-label") or item.text
-            label = re.sub(r"^Show only results of type:\s*", "", label, flags=re.IGNORECASE)
-            label = label.replace(" selected", "").strip()
-            if label:
-                options.append(label)
-    finally:
+    if include_filter_by_options:
         try:
-            if trigger.get_attribute("aria-expanded") == "true":
-                trigger.click()
-        except Exception:
-            pass
+            trigger.click()
+            menu = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "ul.search-advanced-filter__navigation-container"))
+            )
+            for item in menu.find_elements(By.CSS_SELECTOR, "[role='button']"):
+                label = item.get_attribute("aria-label") or item.text
+                label = re.sub(r"^Show only results of type:\s*", "", label, flags=re.IGNORECASE)
+                label = label.replace(" selected", "").strip()
+                if label:
+                    options.append(label)
+        finally:
+            try:
+                if trigger.get_attribute("aria-expanded") == "true":
+                    trigger.click()
+            except Exception:
+                pass
 
     filters: list[dict[str, Any]] = []
     for block in _section_blocks(driver, verbose=verbose):
@@ -514,6 +540,8 @@ def _set_checkbox_group(
     delay_seconds: float | int = 0,
     verbose: bool = True,
 ) -> None:
+    started_at = time.perf_counter()
+    _sync_log(verbose, "filters: checkbox scan start")
     desired = {}
     for item in inputs:
         name = _normalize(item.get("name", ""))
@@ -536,6 +564,7 @@ def _set_checkbox_group(
                 label = None
         names = _checkbox_names(checkbox, label, verbose=verbose)
         records.append((checkbox, label, names))
+    _sync_log(verbose, "filters: checkbox scan done", started_at)
 
     def _matched_state(names: list[str]) -> bool:
         for name in names:
@@ -553,23 +582,27 @@ def _set_checkbox_group(
     if not to_fix:
         return
 
+    pass_started_at = time.perf_counter()
+    _sync_log(verbose, f"filters: checkbox apply start ({len(to_fix)})")
     for index, (checkbox, label, names, desired_state) in enumerate(to_fix):
         try:
             if driver is not None:
-                _click_safely(driver, checkbox, 0, verbose=verbose)
+                _click_fast(driver, checkbox)
             else:
                 checkbox.click()
         except Exception:
             if label is not None:
                 if driver is not None:
-                    _click_safely(driver, label, 0, verbose=verbose)
+                    _click_fast(driver, label)
                 else:
                     label.click()
             else:
                 raise
-        if index < len(to_fix) - 1:
-            _pause(delay_seconds, verbose=verbose)
+    _pause(delay_seconds, verbose=verbose)
+    _sync_log(verbose, "filters: checkbox apply done", pass_started_at)
 
+    verify_started_at = time.perf_counter()
+    _sync_log(verbose, "filters: checkbox verify start")
     remaining = []
     for checkbox, label, names, desired_state in to_fix:
         try:
@@ -580,28 +613,34 @@ def _set_checkbox_group(
             remaining.append((checkbox, label, names, desired_state))
 
     if not remaining:
+        _sync_log(verbose, "filters: checkbox verify done", verify_started_at)
         return
 
+    retry_started_at = time.perf_counter()
+    _sync_log(verbose, f"filters: checkbox retry start ({len(remaining)})")
     for index, (checkbox, label, names, desired_state) in enumerate(remaining):
         if label is not None:
             if driver is not None:
-                _click_safely(driver, label, 0, verbose=verbose)
+                _click_fast(driver, label)
             else:
                 label.click()
         else:
             if driver is not None:
-                _click_safely(driver, checkbox, 0, verbose=verbose)
+                _click_fast(driver, checkbox)
             else:
                 checkbox.click()
-        if index < len(remaining) - 1:
-            _pause(delay_seconds, verbose=verbose)
+    _pause(delay_seconds, verbose=verbose)
+    _sync_log(verbose, "filters: checkbox retry done", retry_started_at)
 
+    final_started_at = time.perf_counter()
+    _sync_log(verbose, "filters: checkbox final verify start")
     for checkbox, label, names, desired_state in remaining:
         try:
             if checkbox.is_selected() != desired_state:
                 raise RuntimeError("Could not sync checkbox group to the requested state")
         except Exception as exc:
             raise RuntimeError("Could not sync checkbox group to the requested state") from exc
+    _sync_log(verbose, "filters: checkbox final verify done", final_started_at)
 
 
 def _set_radio_group(block, input_name: str, delay_seconds: float | int = 0, verbose: bool = True) -> None:
@@ -675,42 +714,76 @@ def _desired_pill_map(target: dict[str, Any] | None) -> dict[str, bool]:
     return desired
 
 
+def _current_checkbox_selected_count(current_filter: dict[str, Any]) -> int:
+    return sum(1 for item in current_filter.get("inputs", []) if bool(item.get("state")))
+
+
 def sync_filters_state(
     driver,
     payload: dict[str, Any],
     delay_seconds: float | int = 1,
     verbose: bool = True,
 ) -> dict[str, Any]:
-    _vlog(verbose, "filters: sync start")
+    started_at = time.perf_counter()
+    _sync_log(verbose, "filters: sync start")
+    phase_at = time.perf_counter()
+    _sync_log(verbose, "filters: open panel start")
     _ensure_all_filters_menu_open(driver, delay_seconds=delay_seconds, verbose=verbose)
+    _sync_log(verbose, "filters: open panel done", phase_at)
+    phase_at = time.perf_counter()
+    _sync_log(verbose, "filters: snapshot start")
     try:
-        current_snapshot = read_filters_state(driver, verbose=verbose, ensure_open=False)
+        current_snapshot = _fast_filters_snapshot(driver, verbose=verbose)
     except Exception:
+        _sync_log(verbose, "filters: snapshot retry")
+        retry_at = time.perf_counter()
         _ensure_all_filters_menu_open(driver, delay_seconds=delay_seconds, verbose=verbose)
-        current_snapshot = read_filters_state(driver, verbose=verbose, ensure_open=False)
+        current_snapshot = _fast_filters_snapshot(driver, verbose=verbose)
+        _sync_log(verbose, "filters: snapshot retry done", retry_at)
+    _sync_log(verbose, "filters: snapshot done", phase_at)
 
     filter_by = payload.get("filter_by")
     changed_any = False
     if filter_by:
         current = current_snapshot["filter_by"]["selected"]
         if _normalize(current) != _normalize(filter_by):
+            phase_at = time.perf_counter()
+            _sync_log(verbose, f"filters: type start {current or 'none'} -> {filter_by}")
             try:
                 set_result_type(driver, filter_by, delay_seconds=delay_seconds, verbose=verbose, ensure_open=False)
             except Exception:
+                _sync_log(verbose, "filters: type retry")
+                retry_at = time.perf_counter()
                 _ensure_all_filters_menu_open(driver, delay_seconds=delay_seconds, verbose=verbose)
                 set_result_type(driver, filter_by, delay_seconds=delay_seconds, verbose=verbose, ensure_open=False)
+                _sync_log(verbose, "filters: type retry done", retry_at)
+            _sync_log(verbose, f"filters: type done {current or 'none'} -> {filter_by}", phase_at)
             changed_any = True
 
     desired_sections = _payload_section_lookup(payload, verbose=verbose)
+    _sync_log(verbose, f"filters: sections start ({len(current_snapshot.get('filters', []))})")
 
     for current_filter in current_snapshot.get("filters", []):
         section = current_filter.get("section", "")
-        section_type = current_filter.get("type", "")
         target = desired_sections.get(_normalize(section))
+        section_type = current_filter.get("type", "")
+        _vlog(verbose, f"{section}: {section_type} scan")
+        if target is None and section_type != "checkbox":
+            _vlog(verbose, f"{section}: no target skip")
+            continue
+        if target is None and section_type == "checkbox":
+            selected_count = _current_checkbox_selected_count(current_filter)
+            if selected_count == 0:
+                _vlog(verbose, f"{section}: checkbox clean skip")
+                continue
+            _vlog(verbose, f"{section}: checkbox missing target clear {selected_count}")
         block = _find_section_block(driver, section, verbose=verbose)
         if block is None:
+            _sync_log(verbose, f"filters: section retry {section or 'unknown'}")
+            retry_at = time.perf_counter()
             _ensure_all_filters_menu_open(driver, delay_seconds=delay_seconds, verbose=verbose)
             block = _find_section_block(driver, section, verbose=verbose)
+            _sync_log(verbose, f"filters: section retry done {section or 'unknown'}", retry_at)
         if block is None:
             continue
 
@@ -720,8 +793,10 @@ def sync_filters_state(
                 current_choice = _current_radio_choice(current_filter)
                 desired_choice = target.get("input", "") if target and target_type == "radio" else current_choice
                 if _normalize(current_choice) != _normalize(desired_choice):
+                    phase_at = time.perf_counter()
+                    _sync_log(verbose, f"filters: {section} radio start")
                     _set_radio_group(block, target.get("input", ""), delay_seconds=delay_seconds, verbose=verbose)
-                    _vlog(verbose, f"{section}: radio {current_choice or 'none'} -> {desired_choice or 'none'}")
+                    _sync_log(verbose, f"filters: {section} radio done {current_choice or 'none'} -> {desired_choice or 'none'}", phase_at)
                     changed_any = True
                 else:
                     _vlog(verbose, f"{section}: radio unchanged")
@@ -729,11 +804,14 @@ def sync_filters_state(
             elif section_type == "checkbox":
                 current_map = _current_checkbox_map(current_filter)
                 desired_map = _desired_checkbox_map(target)
+                _vlog(verbose, f"{section}: checkbox state {sum(1 for state in current_map.values() if state)}/{len(current_map)} -> {sum(1 for state in desired_map.values() if state)}/{len(desired_map)}")
                 if current_map != desired_map:
+                    phase_at = time.perf_counter()
+                    _sync_log(verbose, f"filters: {section} checkbox start")
                     _set_checkbox_group(block, target.get("inputs", []) if target else [], driver=driver, delay_seconds=delay_seconds, verbose=verbose)
                     current_count = sum(1 for state in current_map.values() if state)
                     desired_count = sum(1 for state in desired_map.values() if state)
-                    _vlog(verbose, f"{section}: checkbox {current_count}/{len(current_map)} -> {desired_count}/{len(desired_map)}")
+                    _sync_log(verbose, f"filters: {section} checkbox done {current_count}/{len(current_map)} -> {desired_count}/{len(desired_map)}", phase_at)
                     changed_any = True
                 else:
                     _vlog(verbose, f"{section}: checkbox unchanged")
@@ -748,8 +826,10 @@ def sync_filters_state(
                     desired_inputs = target.get("inputs", [])
                     desired_state = bool(desired_inputs[0].get("state")) if desired_inputs else False
                 if before_state != desired_state:
+                    phase_at = time.perf_counter()
+                    _sync_log(verbose, f"filters: {section} switch start")
                     _set_switch(block, desired_state, driver=driver, delay_seconds=delay_seconds, verbose=verbose)
-                    _vlog(verbose, f"{section}: switch {'on' if before_state else 'off'} -> {'on' if desired_state else 'off'}")
+                    _sync_log(verbose, f"filters: {section} switch done {'on' if before_state else 'off'} -> {'on' if desired_state else 'off'}", phase_at)
                     changed_any = True
                 else:
                     _vlog(verbose, f"{section}: switch unchanged")
@@ -758,15 +838,19 @@ def sync_filters_state(
                 current_map = _current_pill_map(current_filter)
                 desired_map = _desired_pill_map(target)
                 if current_map != desired_map:
+                    phase_at = time.perf_counter()
+                    _sync_log(verbose, f"filters: {section} pill start")
                     _set_pills(block, target.get("inputs", []) if target else [], delay_seconds=delay_seconds, verbose=verbose)
                     current_count = sum(1 for state in current_map.values() if state)
                     desired_count = sum(1 for state in desired_map.values() if state)
-                    _vlog(verbose, f"{section}: pill {current_count}/{len(current_map)} -> {desired_count}/{len(desired_map)}")
+                    _sync_log(verbose, f"filters: {section} pill done {current_count}/{len(current_map)} -> {desired_count}/{len(desired_map)}", phase_at)
                     changed_any = True
                 else:
                     _vlog(verbose, f"{section}: pill unchanged")
                     continue
         except Exception:
+            _sync_log(verbose, f"filters: {section} retry")
+            retry_at = time.perf_counter()
             _ensure_all_filters_menu_open(driver, delay_seconds=delay_seconds, verbose=verbose)
             block = _find_section_block(driver, section, verbose=verbose)
             if block is None:
@@ -789,15 +873,27 @@ def sync_filters_state(
             elif section_type == "multiselect_pill":
                 _set_pills(block, target.get("inputs", []) if target else [], delay_seconds=delay_seconds, verbose=verbose)
             changed_any = True
+            _sync_log(verbose, f"filters: {section} retry done", retry_at)
 
     if not changed_any:
+        _sync_log(verbose, "filters: sync done (unchanged)", started_at)
         return current_snapshot
 
     try:
-        return read_filters_state(driver, verbose=verbose, ensure_open=False)
+        phase_at = time.perf_counter()
+        _sync_log(verbose, "filters: final snapshot start")
+        result = _fast_filters_snapshot(driver, verbose=verbose)
+        _sync_log(verbose, "filters: final snapshot done", phase_at)
+        _sync_log(verbose, "filters: sync done", started_at)
+        return result
     except Exception:
+        _sync_log(verbose, "filters: final snapshot retry")
+        retry_at = time.perf_counter()
         _ensure_all_filters_menu_open(driver, delay_seconds=delay_seconds, verbose=verbose)
-        return read_filters_state(driver, verbose=verbose, ensure_open=False)
+        result = _fast_filters_snapshot(driver, verbose=verbose)
+        _sync_log(verbose, "filters: final snapshot retry done", retry_at)
+        _sync_log(verbose, "filters: sync done", started_at)
+        return result
 
 
 def show_results(driver, delay_seconds: float | int = 1, verbose: bool = True) -> dict[str, Any]:

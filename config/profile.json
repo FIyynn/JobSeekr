@@ -8,6 +8,7 @@
   "browser": {
     "headless": false,
     "use_stealth": true,
+    "version_main": 149,
     "page_load_timeout_seconds": 45,
     "wait_timeout_seconds": 20,
     "start_maximized": true,
