@@ -101,6 +101,7 @@ def extract_listing_detail(
                 "listing_link": dev_listing.get("link", ""),
                 "company_url": parsed.get("company_url", ""),
                 "company_logo_url": parsed.get("company_logo_url", ""),
+                "apply_button_type": parsed.get("apply_button_type", ""),
                 "apply_button_xpath": parsed.get("apply_button_xpath", ""),
                 "save_button_xpath": parsed.get("save_button_xpath", ""),
             }

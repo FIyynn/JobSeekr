@@ -140,6 +140,47 @@ def _select_first(root: Tag, selectors: tuple[str, ...]) -> Tag | None:
     return None
 
 
+def _prompt_company_fallback(root: Tag) -> tuple[str, str]:
+    blocks = root.select("div.t-14[tabindex='-1'], div.display-flex.justify-space-between.flex-wrap.mt2")
+    for block in blocks:
+        company_url = ""
+        company_link = block.select_one("a[data-view-name='job-details-about-company-name-link'], a[href*='/company/']")
+        if company_link:
+            company_href = company_link.get("href", "")
+            company_url = _company_path(company_href)
+
+        logo_img = block.select_one(
+            "img.evi-image.lazy-image.ghost-company, img.ghost-company, img[alt*='company logo'], img[title]"
+        )
+        company_logo_url = logo_img.get("src", "") if logo_img else ""
+        if company_url or company_logo_url:
+            return company_url, company_logo_url
+    return "", ""
+
+
+def _top_card_company_anchor(root: Tag) -> Tag | None:
+    return _select_first(
+        root,
+        (
+            "div.job-details-jobs-unified-top-card__container--two-pane a[data-test-app-aware-link][aria-label*='logo'][href*='/company/']",
+            "div.job-details-jobs-unified-top-card__container--two-pane a[aria-label*='logo'][href*='/company/']",
+            "a[data-test-app-aware-link][aria-label*='logo'][href*='/company/']",
+            "a[aria-label*='logo'][href*='/company/']",
+        ),
+    )
+
+
+def _apply_button_type(button: Tag | None) -> str:
+    if button is None:
+        return ""
+    label = _clean(button.get("aria-label", "") or button.get_text(" ", strip=True)).casefold()
+    if "easy apply" in label:
+        return "easy_apply"
+    if "apply" in label:
+        return "external_apply"
+    return ""
+
+
 def _direct_text(node: Tag | None) -> str:
     if node is None:
         return ""
@@ -186,7 +227,18 @@ def _parse_top_card(root: Tag, now: datetime | None = None) -> dict[str, Any]:
     if not company_url:
         company_about = top_card.select_one("a[data-view-name='job-details-about-company-name-link'], a[href*='/company/']")
         if company_about:
-            company_url = _company_path(company_about.get("href", ""))
+            company_about_href = company_about.get("href", "")
+            company_url = _company_path(company_about_href)
+    top_card_company_anchor = _top_card_company_anchor(top_card)
+    if not company_url and top_card_company_anchor:
+        top_card_company_href = top_card_company_anchor.get("href", "")
+        company_url = _company_path(top_card_company_href)
+    top_card_company_logo = None
+    if top_card_company_anchor:
+        top_card_company_logo = top_card_company_anchor.select_one("img")
+    fallback_company_url, fallback_company_logo_url = _prompt_company_fallback(top_card)
+    if not company_url and fallback_company_url:
+        company_url = fallback_company_url
 
     sticky_node = top_card.select_one(".job-details-jobs-unified-top-card__sticky-header .t-14.truncate")
     sticky_parts = _split_middot_text(_text(sticky_node))
@@ -239,6 +291,7 @@ def _parse_top_card(root: Tag, now: datetime | None = None) -> dict[str, Any]:
     apply_button = top_card.select_one(
         ".jobs-apply-button--top-card .jobs-apply-button, .jobs-apply-button--top-card button, .jobs-apply-button"
     )
+    apply_button_type = _apply_button_type(apply_button)
     save_button = top_card.select_one(".jobs-save-button")
     missing_required_qualifications = bool(
         top_card.find(string=re.compile(r"missing required qualifications", flags=re.IGNORECASE))
@@ -266,10 +319,11 @@ def _parse_top_card(root: Tag, now: datetime | None = None) -> dict[str, Any]:
         "response_insights": response_insights,
         "listing_preferences": listing_preferences,
         "apply_button_xpath": ".//button[contains(@class, 'jobs-apply-button')]" if apply_button else "",
+        "apply_button_type": apply_button_type,
         "save_button_xpath": ".//button[contains(@class, 'jobs-save-button')]" if save_button else "",
         "missing_required_qualifications": missing_required_qualifications,
         "missing required qualifications?": missing_required_qualifications,
-        "company_logo_url": "",
+        "company_logo_url": top_card_company_logo.get("src", "") if top_card_company_logo else fallback_company_logo_url,
     }
 
 
@@ -326,6 +380,18 @@ def _parse_job_description(root: Tag) -> dict[str, Any]:
 def _parse_company_profile(root: Tag) -> dict[str, Any]:
     section = _find_heading_section(root, "About the company")
     if section is None:
+        fallback_company_url, fallback_company_logo_url = _prompt_company_fallback(root)
+        if fallback_company_url or fallback_company_logo_url:
+            return {
+                "name": "",
+                "url": fallback_company_url,
+                "followers": "",
+                "industry": "",
+                "size": "",
+                "linkedin_employee_count": "",
+                "description": "",
+                "company_logo_url": fallback_company_logo_url,
+            }
         return {}
 
     logo_link = section.select_one("a[href*='/company/']")
@@ -371,6 +437,8 @@ def parse_listing_detail(html: str, verbose: bool = True, now: datetime | None =
 
     top_card = _parse_top_card(root, now=now)
     company_profile = _parse_company_profile(root)
+    if not top_card.get("company_url") and company_profile.get("url"):
+        top_card["company_url"] = company_profile["url"]
     if not top_card.get("company_logo_url") and company_profile.get("company_logo_url"):
         top_card["company_logo_url"] = company_profile["company_logo_url"]
 

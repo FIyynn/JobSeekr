@@ -1,4 +1,6 @@
 from .driver import build_driver, close_driver
+from .interact import interact
+from .markdown import output_markdown
 from .linkedin_jobs import (
     extract_listings,
     get_current_page,
@@ -12,4 +14,3 @@ from .linkedin_jobs import (
     show_results,
     sync_filters_state,
 )
-

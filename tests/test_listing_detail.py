@@ -122,6 +122,40 @@ DETAIL_HTML = """
 """
 
 
+FALLBACK_DETAIL_HTML = """
+<div class="jobs-search__job-details--wrapper">
+  <div class="jobs-details__main-content jobs-details__main-content--single-pane full-width">
+    <a href="/jobs/view/4430986280/?alternateChannel=search&amp;eBP=NON_CHARGEABLE_CHANNEL&amp;refId=ysZMTi%2Bd2uZ%2FMYe5DBmTRA%3D%3D&amp;trackingId=e424vVXaUZdGup1oWaAGvw%3D%3D&amp;trk=d_flagship3_search_srp_jobs">
+      <h1 class="t-24 t-bold inline">Spa attendant</h1>
+    </a>
+
+    <div class="t-14" tabindex="-1">
+      <div class="display-flex justify-space-between flex-wrap mt2">
+        <a href="/company/anjana-spa-so-hotel-ras-al-khaima/" data-view-name="job-details-about-company-name-link">Anjana Spa So Hotel Ras Al khaima</a>
+        <a href="/jobs/view/4430986280/?alternateChannel=search&amp;eBP=NON_CHARGEABLE_CHANNEL&amp;refId=ysZMTi%2Bd2uZ%2FMYe5DBmTRA%3D%3D&amp;trackingId=e424vVXaUZdGup1oWaAGvw%3D%3D&amp;trk=d_flagship3_search_srp_jobs">Spa attendant</a>
+      </div>
+      <img width="32" src="https://media.licdn.com/dms/image/v2/D560BAQFallback/company-logo_100_100/company-logo_100_100/0/0000000000000/fallback_logo?e=1782950400&amp;v=beta&amp;t=fallback" loading="lazy" height="32" alt="" class="evi-image lazy-image ghost-company ember-view">
+    </div>
+  </div>
+</div>
+"""
+
+
+TOP_CARD_LOGO_ANCHOR_HTML = """
+<div class="jobs-search__job-details--wrapper">
+  <div class="relative job-details-jobs-unified-top-card__container--two-pane">
+    <a class="GeFoPmeqAgTgsvJrnTaiPiwcIrHuJQMUc" aria-label="Canonical logo" href="https://www.linkedin.com/company/canonical/life" data-test-app-aware-link="">
+      <div class="ivm-image-view-model">
+        <div class="ivm-view-attr__img-wrapper">
+          <img width="32" src="https://media.licdn.com/dms/image/v2/C560BAQEbIYAkAURcYw/company-logo_100_100/company-logo_100_100/0/1650566107463/canonical_logo?e=1783555200&amp;v=beta&amp;t=8U-B_drvQ0KCOu679tosgYAr_XASLUO-L4OAm4Li2g8" loading="lazy" height="32" alt="Canonical logo" id="ember116" class="ivm-view-attr__img--centered EntityPhoto-square-1 evi-image lazy-image ember-view">
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+"""
+
+
 class FakeCard:
     def __init__(self, driver, index: int, listing: dict):
         self.driver = driver
@@ -203,6 +237,7 @@ class ListingDetailTests(unittest.TestCase):
         self.assertEqual(parsed["application_management"], "Responses managed off LinkedIn")
         self.assertEqual(parsed["response_insights"], "")
         self.assertEqual(parsed["listing_preferences"], ["Remote", "Full-time"])
+        self.assertEqual(parsed["apply_button_type"], "external_apply")
         self.assertTrue(parsed["missing_required_qualifications"])
         self.assertTrue(parsed["missing required qualifications?"])
         self.assertEqual(parsed["apply_button_xpath"], ".//button[contains(@class, 'jobs-apply-button')]")
@@ -221,6 +256,24 @@ class ListingDetailTests(unittest.TestCase):
         self.assertIn("customer conversation management platform", parsed["company_profile"]["description"])
         self.assertIn("Resume MUST be in English", parsed["job_description"]["raw_text"])
         self.assertIn("Role Description", parsed["job_description"]["raw_text"])
+
+    def test_parse_listing_detail_prompt_fallback(self):
+        parsed = parse_listing_detail(
+            FALLBACK_DETAIL_HTML,
+            now=datetime(2026, 6, 14, 12, 0, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(parsed["company_url"], "/company/anjana-spa-so-hotel-ras-al-khaima/")
+        self.assertIn("fallback_logo", parsed["company_logo_url"])
+        self.assertEqual(parsed["company_profile"]["url"], "/company/anjana-spa-so-hotel-ras-al-khaima/")
+        self.assertIn("fallback_logo", parsed["company_profile"]["company_logo_url"])
+
+    def test_parse_listing_detail_top_card_logo_anchor(self):
+        parsed = parse_listing_detail(
+            TOP_CARD_LOGO_ANCHOR_HTML,
+            now=datetime(2026, 6, 14, 12, 0, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(parsed["company_url"], "/company/canonical/life/")
+        self.assertIn("canonical_logo", parsed["company_logo_url"])
 
     def test_extract_listing_detail_smoke(self):
         driver = FakeDriver(
@@ -245,6 +298,7 @@ class ListingDetailTests(unittest.TestCase):
         self.assertEqual(result["dev"]["interactables"][0]["listing_link"], "https://www.linkedin.com/jobs/view/3/")
         self.assertEqual(result["dev"]["interactables"][0]["company_url"], "/company/respondio/life/")
         self.assertIn("company_logo_url", result["dev"]["interactables"][0])
+        self.assertIn("apply_button_type", result["dev"]["interactables"][0])
         self.assertIn("apply_button_xpath", result["dev"]["interactables"][0])
         self.assertEqual(result["ai"][0]["listing"]["title"], "Third")
         self.assertIn("company_profile", result["ai"][0])
@@ -273,6 +327,17 @@ class ListingDetailTests(unittest.TestCase):
         self.assertEqual(result["dev"]["index"], -1)
         self.assertEqual(len(result["dev"]["interactables"]), 2)
         self.assertEqual(len(result["ai"]), 2)
+
+    def test_parse_listing_detail_easy_apply_button(self):
+        html = DETAIL_HTML.replace(
+            "Apply to Business Development Representative (EMEA) on company website",
+            "Easy Apply to Business Development Representative (EMEA) at Respond.io",
+        ).replace("<span class=\"artdeco-button__text\">Apply</span>", "<span class=\"artdeco-button__text\">Easy Apply</span>")
+        parsed = parse_listing_detail(
+            html,
+            now=datetime(2026, 6, 14, 12, 0, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(parsed["apply_button_type"], "easy_apply")
 
 
 if __name__ == "__main__":
