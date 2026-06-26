@@ -23,6 +23,7 @@ SUPPORTED_ACTIONS = {
     "clear",
     "select_option",
     "hover",
+    "attach",
 }
 
 ACTION_ALIASES = {
@@ -33,6 +34,8 @@ ACTION_ALIASES = {
     "choose": "select_option",
     "select": "select_option",
     "press": "click",
+    "upload": "attach",
+    "file": "attach",
 }
 
 
@@ -102,6 +105,106 @@ def _live_value(element: Any) -> str:
         return ""
 
 
+def _file_path_from_payload(payload: dict[str, str]) -> str:
+    for key in ("path", "file", "value", "text"):
+        value = (payload.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _stateful_target_type(target: dict[str, Any]) -> str:
+    return _text_clean(target.get("type", "")).lower()
+
+
+def _stateful_target_label(target: dict[str, Any]) -> str:
+    for key in ("anchor_text", "text", "aria_label", "value", "id"):
+        value = _text_clean(target.get(key, ""))
+        if value:
+            return value
+    return ""
+
+
+def _click_stateful_live_target(driver: Any, target: dict[str, Any]) -> bool:
+    element = _find_live_element(driver, target)
+    if element is None:
+        return False
+
+    target_label = _stateful_target_label(target).casefold()
+    target_type = _stateful_target_type(target)
+    selectors = []
+    if target_type in {"radio", "checkbox"}:
+        selectors.extend([
+            "input[type='radio']",
+            "input[type='checkbox']",
+            "label",
+        ])
+    if target_type in {"switch", "toggle"}:
+        selectors.extend([
+            "input[type='checkbox']",
+            "[role='switch']",
+            "button[aria-pressed]",
+            "label",
+        ])
+    if target_type == "multiselect_pill":
+        selectors.extend([
+            "button[aria-pressed]",
+            "button",
+        ])
+
+    roots = [element]
+    try:
+        parent = getattr(element, "parent", None) or getattr(element, "find_element", None)
+    except Exception:
+        parent = None
+    try:
+        current = element
+        for _ in range(3):
+            current = current.find_element(By.XPATH, "./parent::*")
+            if current is not None:
+                roots.append(current)
+    except Exception:
+        pass
+
+    def _matches(node: Any) -> bool:
+        try:
+            text = _text_clean(getattr(node, "text", "") or getattr(node, "get_attribute", lambda *_: "")("aria-label") or "")
+        except Exception:
+            text = ""
+        return bool(target_label and target_label in text.casefold()) or bool(text and text.casefold() in target_label)
+
+    for root in roots:
+        for selector in selectors:
+            try:
+                for candidate in root.find_elements(By.CSS_SELECTOR, selector):
+                    if selector == "label":
+                        if _matches(candidate):
+                            candidate.click()
+                            return True
+                        continue
+                    aria = ""
+                    try:
+                        aria = _text_clean(candidate.get_attribute("aria-label") or "")
+                    except Exception:
+                        aria = ""
+                    text = _text_clean(getattr(candidate, "text", "") or "")
+                    if _matches(candidate) or (aria and target_label in aria.casefold()) or (text and target_label in text.casefold()):
+                        candidate.click()
+                        return True
+            except Exception:
+                continue
+
+    try:
+        element.click()
+        return True
+    except Exception:
+        try:
+            driver.execute_script("arguments[0].click();", element)
+            return True
+        except Exception:
+            return False
+
+
 def _perform_live_action(driver, target: dict[str, Any], action: str, payload: dict[str, str]) -> tuple[bool, str]:
     element = _find_live_element(driver, target)
     if element is None:
@@ -126,6 +229,9 @@ def _perform_live_action(driver, target: dict[str, Any], action: str, payload: d
                 return False
 
     if action in {"click", "open"}:
+        if _stateful_target_type(target) in {"radio", "checkbox", "switch", "toggle", "multiselect_pill"}:
+            if _click_stateful_live_target(driver, target):
+                return True, f"Clicked {target.get('id', 'target')}."
         if not _click_with_fallback():
             return False, f"Could not click live element: {target.get('id', 'target')}."
         return True, f"Clicked {target.get('id', 'target')}."
@@ -184,6 +290,32 @@ def _perform_live_action(driver, target: dict[str, Any], action: str, payload: d
                 return True, f"Selected option on {target.get('id', 'target')}."
             except Exception as exc:
                 return False, f"Could not select option: {exc}"
+
+    if action == "attach":
+        path = _file_path_from_payload(payload)
+        if not path:
+            return False, "Missing path for attach."
+        try:
+            element.send_keys(path)
+            return True, f"Attached file for {target.get('id', 'target')}."
+        except Exception:
+            try:
+                driver.execute_script(
+                    """
+                    arguments[0].removeAttribute('hidden');
+                    arguments[0].style.display = 'block';
+                    arguments[0].style.visibility = 'visible';
+                    arguments[0].style.opacity = '1';
+                    """,
+                    element,
+                )
+            except Exception:
+                pass
+            try:
+                element.send_keys(path)
+                return True, f"Attached file for {target.get('id', 'target')}."
+            except Exception as exc:
+                return False, f"Could not attach file: {exc}"
 
     return False, f"Unsupported live action: {action}"
 
@@ -858,6 +990,9 @@ def _action_from_payload(action: str, payload: dict[str, str]) -> dict[str, str]
     if action == "input_text":
         value = payload.get("value") or payload.get("text") or ""
         return {"value": value}
+    if action == "attach":
+        value = _file_path_from_payload(payload)
+        return {"path": value}
     return payload
 
 
@@ -1037,6 +1172,49 @@ def interact(
             "payload": resolved_payload,
             "diffs": diffs,
             "message": message or f"Toggled {target_kind} target.",
+        }
+
+    if normalized_action == "attach":
+        target_type = str(target.get("type", "")).lower()
+        input_type = str((target.get("state") or {}).get("input_type", "")).lower()
+        if target_type != "attach" and input_type != "file":
+            return _error_result(
+                normalized_action,
+                target_id,
+                f"Target is not attachable: {target_id}",
+            )
+        path = _file_path_from_payload(resolved_payload)
+        if not path:
+            return _error_result(
+                normalized_action,
+                target_id,
+                "Missing path for attach.",
+            )
+        _start_dom_mutation_tracking(driver, target)
+        ok, message = _perform_live_action(driver, target, normalized_action, resolved_payload)
+        if not ok:
+            _stop_dom_mutation_tracking(driver)
+            return _error_result(normalized_action, target_id, message)
+        _wait_for_dom_quiet(driver)
+        if delay_seconds and float(delay_seconds) > 0:
+            time.sleep(float(delay_seconds))
+        records = _stop_dom_mutation_tracking(driver)
+        after_snapshot_markdown, after_snapshot_dev = _snapshot_page(driver)
+        record_diffs = _summarize_dom_mutations(records) if records else {"changed": [], "added": [], "deleted_element_count": 0}
+        scoped_diffs = _scoped_markdown_diffs(driver, target, before_scope_html) if can_scope and before_scope_html else {"changed": [], "added": [], "deleted_element_count": 0}
+        snapshot_diffs = _row_state_diffs(before_snapshot_dev, after_snapshot_dev, target_id)
+        if not _has_meaningful_diff(snapshot_diffs) and before_snapshot_markdown != after_snapshot_markdown:
+            snapshot_diffs = _markdown_diffs(before_snapshot_markdown, after_snapshot_markdown)
+        diffs = _choose_diff_summary(snapshot_diffs, record_diffs, scoped_diffs)
+        return {
+            "status": "success",
+            "interaction_type": normalized_action,
+            "requested_target_id": target_id,
+            "target_id": target.get("id", target_id),
+            "target": target,
+            "payload": resolved_payload,
+            "diffs": diffs,
+            "message": message or f"Attached file to {target.get('id', target_id)}.",
         }
 
     if normalized_action == "input_text":

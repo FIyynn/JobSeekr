@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import unittest
 
-from browser.interact import interact, _choose_diff_summary, _row_state_diffs, _markdown_diffs, _diff_text
+from browser.interact import interact, _choose_diff_summary, _row_state_diffs, _markdown_diffs, _diff_text, _click_stateful_live_target
 from browser.markdown import output_markdown
 
 
@@ -21,6 +21,23 @@ GENERIC_HTML = """
       </select>
       <div>
         <img alt="Logo" src="https://example.com/logo.png"> Company name
+      </div>
+    </main>
+  </body>
+</html>
+"""
+
+ATTACH_HTML = """
+<html>
+  <body>
+    <main>
+      <div>Resume/CV *</div>
+      <div class="secondary-button">
+        <div>
+          <button type="button" class="btn btn--pill">Attach</button>
+          <label class="visually-hidden" for="resume">Attach</label>
+          <input id="resume" class="visually-hidden" type="file" accept=".pdf,.doc,.docx,.txt,.rtf">
+        </div>
       </div>
     </main>
   </body>
@@ -105,7 +122,60 @@ class LiveFakeDriver(FakePageDriver):
         self.scripts.append((script, args))
 
 
+class StatefulFakeElement(FakeElement):
+    def __init__(self, text: str = "", tag_name: str = "div", selected: bool = False, on_click=None, children=None, aria_label: str = ""):
+        super().__init__(text=text, tag_name=tag_name, selected=selected)
+        self.on_click = on_click
+        self.children = children or []
+        self.aria_label = aria_label
+
+    def click(self):
+        super().click()
+        if callable(self.on_click):
+            self.on_click()
+
+    def get_attribute(self, name):
+        if name == "aria-label":
+            return self.aria_label
+        return super().get_attribute(name)
+
+    def find_elements(self, by, value):
+        selector = value or ""
+        if selector == "label":
+            return [child for child in self.children if child.tag_name == "label"]
+        if selector == "input[type='radio']":
+            return [child for child in self.children if child.tag_name == "input" and getattr(child, "input_type", "") == "radio"]
+        if selector == "input[type='checkbox']":
+            return [child for child in self.children if child.tag_name == "input" and getattr(child, "input_type", "") == "checkbox"]
+        if selector == "button[aria-pressed]":
+            return [child for child in self.children if child.tag_name == "button" and child.aria_label]
+        if selector == "button":
+            return [child for child in self.children if child.tag_name == "button"]
+        return []
+
+
 class InteractTests(unittest.TestCase):
+    def test_stateful_click_uses_matching_label(self):
+        clicked = {"count": 0}
+
+        def _mark_clicked():
+            clicked["count"] += 1
+
+        label = StatefulFakeElement(text="Past month", tag_name="label", on_click=_mark_clicked)
+        input_node = StatefulFakeElement(text="", tag_name="input")
+        input_node.input_type = "radio"
+        root = StatefulFakeElement(text="Past month", tag_name="div", children=[input_node, label])
+        driver = LiveFakeDriver("https://example.com", GENERIC_HTML)
+        driver.register("#past_month", root)
+        target = {
+            "id": "i7",
+            "type": "radio",
+            "text": "Past month",
+            "locator": {"kind": "css", "value": "#past_month"},
+        }
+        self.assertTrue(_click_stateful_live_target(driver, target))
+        self.assertEqual(clicked["count"], 1)
+
     def test_resolves_stable_id_and_noops_click(self):
         markdown, dev = output_markdown(FakePageDriver("https://example.com", GENERIC_HTML))
         button = next(item for item in dev["interactables"] if item["type"] == "button")
@@ -215,11 +285,11 @@ class InteractTests(unittest.TestCase):
         self.assertEqual(result["diffs"]["changed"], [])
 
     def test_clear_returns_deleted_count(self):
-        markdown = "Notes [[i1]]"
+        markdown = "Notes [[t1]]"
         interactables = {
             "interactables": [
                 {
-                    "id": "i1",
+                    "id": "t1",
                     "order": 1,
                     "type": "input",
                     "text": "Notes",
@@ -233,10 +303,40 @@ class InteractTests(unittest.TestCase):
         driver = LiveFakeDriver("https://example.com", GENERIC_HTML)
         driver.register("#notes", FakeElement(text="Notes", tag_name="input"))
         snapshot = deepcopy(interactables)
-        result = interact(driver, markdown, interactables, "clear", "i1")
+        result = interact(driver, markdown, interactables, "clear", "t1")
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["diffs"]["deleted_element_count"], 2)
         self.assertEqual(interactables, snapshot)
+
+    def test_attach_uploads_file_path(self):
+        markdown, dev = output_markdown(FakePageDriver("https://example.com", ATTACH_HTML))
+        attach_target = next(item for item in dev["interactables"] if item["type"] == "attach")
+        driver = LiveFakeDriver("https://example.com", ATTACH_HTML)
+        file_input = FakeElement(text=attach_target["text"], tag_name="input")
+        driver.register(attach_target["locator"]["value"], file_input)
+        result = interact(driver, markdown, dev, "attach", f'{attach_target["id"]}?path=C%3A%5Ctemp%5Cresume.pdf')
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["interaction_type"], "attach")
+        self.assertEqual(result["payload"]["path"], "C:\\temp\\resume.pdf")
+        self.assertEqual(file_input.value, "C:\\temp\\resume.pdf")
+
+    def test_attach_requires_a_path(self):
+        markdown, dev = output_markdown(FakePageDriver("https://example.com", ATTACH_HTML))
+        attach_target = next(item for item in dev["interactables"] if item["type"] == "attach")
+        driver = LiveFakeDriver("https://example.com", ATTACH_HTML)
+        driver.register(attach_target["locator"]["value"], FakeElement(text=attach_target["text"], tag_name="input"))
+        result = interact(driver, markdown, dev, "attach", attach_target["id"])
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Missing path for attach", result["message"])
+
+    def test_attach_rejects_non_file_targets(self):
+        markdown, dev = output_markdown(FakePageDriver("https://example.com", GENERIC_HTML))
+        button = next(item for item in dev["interactables"] if item["type"] == "button")
+        driver = LiveFakeDriver("https://example.com", GENERIC_HTML)
+        driver.register(button["locator"]["value"], FakeElement(text=button["text"], tag_name="button"))
+        result = interact(driver, markdown, dev, "attach", f'{button["id"]}?path=C%3A%5Ctemp%5Cresume.pdf')
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Target is not attachable", result["message"])
 
     def test_unsupported_interaction_fails_cleanly(self):
         markdown, dev = output_markdown(FakePageDriver("https://example.com", GENERIC_HTML))

@@ -35,6 +35,23 @@ GENERIC_HTML = """
 </html>
 """
 
+ATTACH_HTML = """
+<html>
+  <body>
+    <main>
+      <div>Resume/CV *</div>
+      <div class="secondary-button">
+        <div>
+          <button type="button" class="btn btn--pill">Attach</button>
+          <label class="visually-hidden" for="resume">Attach</label>
+          <input id="resume" class="visually-hidden" type="file" accept=".pdf,.doc,.docx,.txt,.rtf">
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
+"""
+
 
 STATEFUL_HTML = """
 <html>
@@ -268,7 +285,8 @@ class MarkdownTests(unittest.TestCase):
         self.assertNotIn("[a link](https://example.com/jobs)", markdown)
         self.assertIn("[[i1]]", markdown)
         self.assertIn("[[i2]]", markdown)
-        self.assertIn("[[i3]]", markdown)
+        self.assertIn("[[t1]]", markdown)
+        self.assertIn("[[s1]]", markdown)
         self.assertEqual(dev["counts"]["interactables"], 4)
         self.assertEqual([item["type"] for item in dev["interactables"]], ["link", "button", "input", "select"])
         self.assertEqual(dev["interactables"][2]["text"], "Email")
@@ -404,13 +422,22 @@ class MarkdownTests(unittest.TestCase):
 
     def test_output_markdown_shows_unchecked_filters(self):
         markdown, dev = output_markdown(FakePageDriver("https://example.com", UNCHECKED_FILTER_HTML))
-        self.assertIn("Easy Apply [unchecked] [[i1]]", markdown)
+        self.assertIn("Easy Apply [unchecked] [[c1]]", markdown)
         self.assertEqual(dev["interactables"][0]["state"].get("checked"), False)
 
     def test_output_markdown_uses_snapshot_state_annotations(self):
         markdown, dev = output_markdown(FakePageDriver("https://example.com", SNAPSHOT_STATE_HTML))
-        self.assertIn("Most relevant [checked] [[i1]]", markdown)
+        self.assertIn("Most relevant [checked] [[r1]]", markdown)
         self.assertTrue(dev["interactables"][0]["state"].get("checked"))
+
+    def test_output_markdown_marks_attach_targets(self):
+        markdown, dev = output_markdown(FakePageDriver("https://example.com", ATTACH_HTML))
+        self.assertIn("Resume/CV *", markdown)
+        self.assertIn("Attach [[a1]]", markdown)
+        self.assertEqual(dev["interactables"][0]["type"], "attach")
+        self.assertEqual(dev["interactables"][0]["locator"]["value"], "#resume")
+        self.assertEqual(dev["interactables"][0]["accept"], ".pdf,.doc,.docx,.txt,.rtf")
+        self.assertNotIn("[[i1]]", markdown)
 
     def test_output_markdown_builds_rows_with_multiple_actions(self):
         markdown, dev = output_markdown(FakePageDriver("https://www.linkedin.com/jobs/search", JOB_CARD_GROUPED_HTML))

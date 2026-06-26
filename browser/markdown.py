@@ -174,7 +174,7 @@ def _remove_markdown_links(markdown: str) -> str:
             match = matches[0]
             before = flattened[: match.start()].strip()
             after = flattened[match.end() :].strip()
-            if not before and (not after or re.fullmatch(r"(\[\[i\d+\]\]|\(img\d+\)|\s)+", after)):
+            if not before and (not after or re.fullmatch(r"(\[\[[a-z]\d+\]\]|\(img\d+\)|\s)+", after, flags=re.IGNORECASE)):
                 cleaned_lines.append(flattened)
                 continue
 

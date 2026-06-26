@@ -5,7 +5,7 @@ import json
 import hashlib
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -28,7 +28,7 @@ BLOCK_TAGS = {
 HEADING_TAGS = {f"h{i}" for i in range(1, 7)}
 INTERACTIVE_TAGS = {"a", "button", "input", "select", "textarea", "summary"}
 NOISE_TAGS = {"script", "style", "noscript", "template", "svg", "path", "meta", "link"}
-INTERACTABLE_REF_RE = re.compile(r"\[\[(i\d+)\]\]")
+INTERACTABLE_REF_RE = re.compile(r"\[\[([a-z]\d+)\]\]", re.IGNORECASE)
 IMAGE_REF_RE = re.compile(r"\((img\d+)\)")
 ROLE_INTERACTABLES = {"button", "link", "tab", "checkbox", "radio", "menuitem", "menuitemcheckbox", "menuitemradio"}
 
@@ -41,6 +41,8 @@ class RenderState:
     images: list[dict[str, Any]]
     counter: int = 0
     image_counter: int = 0
+    type_counters: dict[str, int] = field(default_factory=dict)
+    handled_file_inputs: set[str] = field(default_factory=set)
 
 
 def _clean(text: str | None) -> str:
@@ -53,7 +55,7 @@ def _clean(text: str | None) -> str:
 
 def _stable_clean(text: str | None) -> str:
     text = _clean(text)
-    text = re.sub(r"\[\[i\d+\]\]", "", text)
+    text = re.sub(r"\[\[[a-z]\d+\]\]", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\(img\d+\)", "", text)
     text = re.sub(r"!\[([^\]]*)\]", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\((?:[^)]+)\)", r"\1", text)
@@ -296,6 +298,80 @@ def _label_from_input(tag: Tag, soup: BeautifulSoup) -> str:
     return ""
 
 
+def _is_file_input(tag: Tag) -> bool:
+    return tag.name == "input" and _clean(tag.get("type", "")).lower() == "file"
+
+
+def _is_attach_trigger(tag: Tag, soup: BeautifulSoup) -> bool:
+    if tag.name not in {"button", "label"}:
+        return False
+    text = _label_for(tag, soup) or _visible_text(tag) or _clean(tag.get("aria-label", ""))
+    lowered = text.casefold()
+    if not lowered:
+        return False
+    attach_terms = (
+        "attach",
+        "upload",
+        "choose file",
+        "browse",
+        "select file",
+        "resume",
+        "cv",
+    )
+    return any(term in lowered for term in attach_terms)
+
+
+def _nearest_file_input(tag: Tag, soup: BeautifulSoup) -> Tag | None:
+    if _is_file_input(tag):
+        return tag
+    if tag.name not in {"button", "label"}:
+        return None
+
+    element_id = _clean(tag.get("for", ""))
+    if element_id:
+        direct = soup.find("input", attrs={"id": element_id, "type": "file"})
+        if isinstance(direct, Tag):
+            return direct
+
+    current = tag.parent
+    depth = 0
+    while isinstance(current, Tag) and depth < 4:
+        direct = current.find("input", attrs={"type": "file"})
+        if isinstance(direct, Tag):
+            return direct
+        current = current.parent
+        depth += 1
+    return None
+
+
+def _ref_prefix(tag: Tag, soup: BeautifulSoup) -> str:
+    if _is_file_input(tag) or _is_attach_trigger(tag, soup):
+        return "a"
+    if tag.name == "input":
+        input_type = _clean(tag.get("type", "")).lower()
+        if input_type == "radio":
+            return "r"
+        if input_type == "checkbox":
+            return "c"
+        if input_type in {"text", "search", "email", "tel", "url", "password", "number", "hidden"}:
+            return "t"
+        if input_type:
+            return "t"
+        return "t"
+    if tag.name == "textarea":
+        return "t"
+    if tag.name == "select":
+        return "s"
+    return "i"
+
+
+def _next_ref_id(state: RenderState, prefix: str) -> str:
+    next_index = state.type_counters.get(prefix, 0) + 1
+    state.type_counters[prefix] = next_index
+    state.counter += 1
+    return f"{prefix}{next_index}"
+
+
 def _label_for(tag: Tag, soup: BeautifulSoup) -> str:
     role = _clean(tag.get("role", "")).lower()
     if role in {"button", "menuitem", "menuitemcheckbox", "menuitemradio"}:
@@ -370,6 +446,8 @@ def _interactable_type(tag: Tag) -> str:
         return "link"
     if tag.name == "button":
         return "button"
+    if _is_file_input(tag):
+        return "attach"
     if tag.name == "select":
         return "select"
     if tag.name == "textarea":
@@ -480,20 +558,25 @@ def _primary_row_item(items: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _record_interactable(tag: Tag, state: RenderState) -> str:
+    attach_input = _nearest_file_input(tag, state.soup) if _is_attach_trigger(tag, state.soup) else None
+    record_tag = attach_input if attach_input is not None else tag
     label = _label_for(tag, state.soup)
-    if not label and tag.name == "a":
+    if attach_input is not None:
+        state.handled_file_inputs.add(_clean(attach_input.get("id", "")))
+        if not label:
+            label = _label_for(attach_input, state.soup)
+    if not label and record_tag.name == "a":
         label = _clean(tag.get("href", ""))
-    if not label and tag.name == "input":
-        input_type = _clean(tag.get("type", ""))
+    if not label and record_tag.name == "input":
+        input_type = _clean(record_tag.get("type", ""))
         label = input_type or "input"
     if not label:
         label = tag.name
 
-    state.counter += 1
-    ref_id = f"i{state.counter}"
+    interactable_type = _interactable_type(record_tag) or _clean(record_tag.get("role", "")).lower() or "button"
+    ref_id = _next_ref_id(state, _ref_prefix(record_tag, state.soup))
     ref_token = f"[[{ref_id}]]"
-    interactable_type = _interactable_type(tag) or _clean(tag.get("role", "")).lower() or "button"
-    control_state = _control_state(tag, state.soup)
+    control_state = _control_state(record_tag, state.soup)
 
     record: dict[str, Any] = {
         "id": ref_id,
@@ -502,7 +585,7 @@ def _record_interactable(tag: Tag, state: RenderState) -> str:
         "text": label,
         "anchor_text": label,
         "aria_label": _clean(tag.get("aria-label", "")),
-        "role": _clean(tag.get("role", "")).lower(),
+        "role": _clean(record_tag.get("role", "")).lower(),
         "href": "",
         "value": "",
         "state": {
@@ -514,27 +597,35 @@ def _record_interactable(tag: Tag, state: RenderState) -> str:
         "state_signature": control_state.get("signature", ""),
         "locator": {
             "kind": "css",
-            "value": _best_css_selector(tag),
+            "value": _best_css_selector(record_tag),
         },
         "ref": ref_token,
     }
 
-    if tag.name == "a":
-        record["href"] = _absolute_url(state.url, tag.get("href", ""))
-    elif tag.name == "input":
-        record["value"] = _clean(tag.get("value", ""))
+    if record_tag.name == "a":
+        record["href"] = _absolute_url(state.url, record_tag.get("href", ""))
+    elif record_tag.name == "input":
+        record["value"] = _clean(record_tag.get("value", ""))
         if "input_type" not in record["state"]:
-            record["state"]["input_type"] = _clean(tag.get("type", ""))
-    elif tag.name == "select":
-        record["value"] = _label_for(tag, state.soup)
-    elif tag.name == "textarea":
-        record["value"] = _clean(tag.get("value", "")) or _clean(tag.text)
-    elif tag.name == "button":
-        record["value"] = _clean(tag.get("value", ""))
+            record["state"]["input_type"] = _clean(record_tag.get("type", ""))
+        if _is_file_input(record_tag):
+            record["value"] = _clean(record_tag.get("value", ""))
+            record["accept"] = _clean(record_tag.get("accept", ""))
+            if attach_input is not None:
+                record["trigger_locator"] = {
+                    "kind": "css",
+                    "value": _best_css_selector(tag),
+                }
+    elif record_tag.name == "select":
+        record["value"] = _label_for(record_tag, state.soup)
+    elif record_tag.name == "textarea":
+        record["value"] = _clean(record_tag.get("value", "")) or _clean(record_tag.text)
+    elif record_tag.name == "button":
+        record["value"] = _clean(record_tag.get("value", ""))
 
     state.interactables.append(record)
     state_suffix = record.get("state_text", "")
-    if tag.name == "a" and record["href"]:
+    if record_tag.name == "a" and record["href"]:
         return f"[{label}]({record['href']}){state_suffix} {ref_token}".strip()
     return f"{label}{state_suffix} {ref_token}".strip()
 
@@ -565,6 +656,11 @@ def _render_nested_images(tag: Tag, state: RenderState) -> str:
 
 
 def _render_inline(tag: Tag, state: RenderState) -> str:
+    if _is_file_input(tag):
+        input_id = _clean(tag.get("id", ""))
+        if input_id and input_id in state.handled_file_inputs:
+            return ""
+        return _record_interactable(tag, state)
     if _is_hidden(tag):
         return ""
     if tag.name == "label" and _clean(tag.get("for", "")):
@@ -651,6 +747,11 @@ def _render_table(tag: Tag, state: RenderState) -> str:
 
 
 def _render_block(tag: Tag, state: RenderState) -> str:
+    if _is_file_input(tag):
+        input_id = _clean(tag.get("id", ""))
+        if input_id and input_id in state.handled_file_inputs:
+            return ""
+        return _record_interactable(tag, state)
     if _is_hidden(tag):
         return ""
 
