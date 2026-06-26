@@ -55,7 +55,7 @@ class FakePageDriver:
 
 
 class FakeElement:
-    def __init__(self, text: str = "", tag_name: str = "div", selected: bool = False):
+    def __init__(self, text: str = "", tag_name: str = "div", selected: bool = False, on_send_keys=None):
         self.text = text
         self.tag_name = tag_name
         self._selected = selected
@@ -63,6 +63,7 @@ class FakeElement:
         self.clicked = False
         self.cleared = False
         self.selected_text = ""
+        self.on_send_keys = on_send_keys
 
     def click(self):
         self.clicked = True
@@ -73,6 +74,8 @@ class FakeElement:
 
     def send_keys(self, value):
         self.value = f"{self.value}{value}"
+        if callable(self.on_send_keys):
+            self.on_send_keys(self.value)
 
     def is_selected(self):
         return self._selected
@@ -135,6 +138,71 @@ class InteractTests(unittest.TestCase):
         self.assertEqual(result["payload"]["value"], "hello world")
         self.assertEqual(result["diffs"]["deleted_element_count"], 1)
         self.assertEqual(result["diffs"]["changed"], [])
+
+    def test_input_text_keeps_first_half_and_captures_second_half(self):
+        before_html = """
+        <html>
+          <body>
+            <main>
+              <div class="search-shell">
+                <input id="search_form_input" name="q" role="combobox" placeholder="Search privately" value="">
+              </div>
+            </main>
+          </body>
+        </html>
+        """
+        after_first_html = """
+        <html>
+          <body>
+            <main>
+              <div class="search-shell">
+                <input id="search_form_input" name="q" role="combobox" placeholder="Search privately" value="engin">
+                <div class="controls">
+                  <button type="button">clear</button>
+                  <button type="button">search</button>
+                </div>
+              </div>
+            </main>
+          </body>
+        </html>
+        """
+        after_second_html = """
+        <html>
+          <body>
+            <main>
+              <div class="search-shell">
+                <input id="search_form_input" name="q" role="combobox" placeholder="Search privately" value="engineer">
+                <div class="controls">
+                  <button type="button">clear</button>
+                  <button type="button">search</button>
+                </div>
+                <div class="suggestions">
+                  <button type="button">engineer jobs</button>
+                  <button type="button">engineer remote</button>
+                </div>
+              </div>
+            </main>
+          </body>
+        </html>
+        """
+        markdown, dev = output_markdown(FakePageDriver("https://duckduckgo.com", before_html))
+        input_target = next(item for item in dev["interactables"] if item["type"] == "input")
+        driver = LiveFakeDriver("https://duckduckgo.com", before_html)
+        state = {"count": 0}
+
+        def _update_page_source(_value):
+            state["count"] += 1
+            driver.page_source = after_first_html if state["count"] == 1 else after_second_html
+
+        driver.register(
+            input_target["locator"]["value"],
+            FakeElement(text=input_target["text"], tag_name="input", on_send_keys=_update_page_source),
+        )
+        result = interact(driver, markdown, dev, "input_text", f'{input_target["id"]}?value=engineer')
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["target_id"], input_target["id"])
+        self.assertIn("engineer jobs", " ".join(result["diffs"]["added"]))
+        self.assertIn("engineer remote", " ".join(result["diffs"]["added"]))
 
     def test_select_option_changes_line(self):
         markdown, dev = output_markdown(FakePageDriver("https://example.com", GENERIC_HTML))

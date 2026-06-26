@@ -653,6 +653,31 @@ def _choose_diff_summary(*candidates: dict[str, Any]) -> dict[str, Any]:
     return scored[0][2]
 
 
+def _merge_diff_summaries(*diffs: dict[str, Any]) -> dict[str, Any]:
+    changed: list[str] = []
+    added: list[str] = []
+    deleted_count = 0
+    seen_changed: set[str] = set()
+    seen_added: set[str] = set()
+
+    for diff in diffs:
+        if not isinstance(diff, dict):
+            continue
+        for item in diff.get("changed", []) or []:
+            text = str(item)
+            if text and text not in seen_changed:
+                seen_changed.add(text)
+                changed.append(text)
+        for item in diff.get("added", []) or []:
+            text = str(item)
+            if text and text not in seen_added:
+                seen_added.add(text)
+                added.append(text)
+        deleted_count += int(diff.get("deleted_element_count", 0) or 0)
+
+    return {"changed": changed, "added": added, "deleted_element_count": deleted_count}
+
+
 def _snapshot_page(driver: Any) -> tuple[str, dict[str, Any]]:
     markdown, dev = output_markdown(driver)
     if not isinstance(dev, dict):
@@ -1023,22 +1048,49 @@ def interact(
                 "Missing value for input_text.",
             )
         _start_dom_mutation_tracking(driver, target)
-        ok, message = _perform_live_action(driver, target, normalized_action, resolved_payload)
-        if not ok:
+        element = _find_live_element(driver, target)
+        if element is None:
             _stop_dom_mutation_tracking(driver)
-            return _error_result(normalized_action, target_id, message)
+            return _error_result(normalized_action, target_id, "Live element could not be found.")
+        half_delay = float(delay_seconds) / 2.0 if delay_seconds and float(delay_seconds) > 0 else 0.0
+        split_index = max(1, len(value) // 2) if len(value) > 1 else len(value)
+        first_value = value[:split_index]
+        second_value = value[split_index:]
+        message = f"Entered text into {target.get('id', target_id)}."
+        try:
+            element.clear()
+        except Exception:
+            pass
+        try:
+            if first_value:
+                element.send_keys(first_value)
+        except Exception as exc:
+            _stop_dom_mutation_tracking(driver)
+            return _error_result(normalized_action, target_id, f"Could not type first half: {exc}")
+        if half_delay > 0:
+            time.sleep(half_delay)
+        after_first_markdown, after_first_dev = _snapshot_page(driver)
+        if second_value:
+            try:
+                element.send_keys(second_value)
+            except Exception as exc:
+                _stop_dom_mutation_tracking(driver)
+                return _error_result(normalized_action, target_id, f"Could not type second half: {exc}")
+        if half_delay > 0:
+            time.sleep(half_delay)
         _wait_for_dom_quiet(driver)
-        if delay_seconds and float(delay_seconds) > 0:
-            time.sleep(float(delay_seconds))
         records = _stop_dom_mutation_tracking(driver)
-        after_snapshot_markdown, after_snapshot_dev = _snapshot_page(driver)
+        after_second_markdown, after_second_dev = _snapshot_page(driver)
         preview_diffs = _preview_diffs(target, normalized_action, value, markdown)
         record_diffs = _summarize_dom_mutations(records) if records else {"changed": [], "added": [], "deleted_element_count": 0}
         scoped_diffs = _scoped_markdown_diffs(driver, target, before_scope_html) if can_scope and before_scope_html else {"changed": [], "added": [], "deleted_element_count": 0}
-        snapshot_diffs = _row_state_diffs(before_snapshot_dev, after_snapshot_dev, target_id)
-        if not _has_meaningful_diff(snapshot_diffs) and before_snapshot_markdown != after_snapshot_markdown:
-            snapshot_diffs = _markdown_diffs(before_snapshot_markdown, after_snapshot_markdown)
-        diffs = _choose_diff_summary(snapshot_diffs, record_diffs, scoped_diffs, preview_diffs)
+        first_snapshot_diffs = _row_state_diffs(before_snapshot_dev, after_first_dev, target_id)
+        if not _has_meaningful_diff(first_snapshot_diffs) and before_snapshot_markdown != after_first_markdown:
+            first_snapshot_diffs = _markdown_diffs(before_snapshot_markdown, after_first_markdown)
+        second_snapshot_diffs = _row_state_diffs(after_first_dev, after_second_dev, target_id)
+        if not _has_meaningful_diff(second_snapshot_diffs) and after_first_markdown != after_second_markdown:
+            second_snapshot_diffs = _markdown_diffs(after_first_markdown, after_second_markdown)
+        diffs = _merge_diff_summaries(first_snapshot_diffs, second_snapshot_diffs, record_diffs, scoped_diffs, preview_diffs)
         status = "success" if (diffs["added"] or diffs["deleted_element_count"]) else "noop"
         return {
             "status": status,
