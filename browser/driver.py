@@ -51,7 +51,7 @@ def build_driver(
     if version_main is not None:
         chrome_kwargs["version_main"] = int(version_main)
     driver = uc.Chrome(**chrome_kwargs)
-    driver.set_page_load_timeout(browser_config.get("page_load_timeout_seconds", 45))
+    driver.set_page_load_timeout(browser_config.get("page_load_timeout_seconds", 15))
     _vlog(verbose, "driver: ready")
     return driver
 

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
@@ -116,3 +116,4 @@ def run_extract_stage(payload: dict[str, Any], context: dict[str, Any], verbose:
         result["run_id"] = saved["_id"]
 
     return result
+

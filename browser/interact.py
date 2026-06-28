@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -10,6 +10,7 @@ from urllib.parse import parse_qsl
 
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.select import Select
 
 from browser.markdown import output_markdown, _remove_markdown_links
@@ -224,6 +225,33 @@ def _perform_live_action(driver, target: dict[str, Any], action: str, payload: d
         except Exception:
             try:
                 driver.execute_script("arguments[0].click();", element)
+                return True
+            except Exception:
+                return False
+
+    def _submit_nearby_form() -> bool:
+        try:
+            form = driver.execute_script("return arguments[0].form || arguments[0].closest('form');", element)
+        except Exception:
+            form = None
+        if not form:
+            return False
+        try:
+            driver.execute_script(
+                """
+                const form = arguments[0];
+                if (form.requestSubmit) {
+                    form.requestSubmit();
+                    return true;
+                }
+                return false;
+                """,
+                form,
+            )
+            return True
+        except Exception:
+            try:
+                driver.execute_script("if (arguments[0] && typeof arguments[0].submit === 'function') { arguments[0].submit(); return true; } return false;", form)
                 return True
             except Exception:
                 return False
@@ -819,6 +847,34 @@ def _snapshot_page(driver: Any) -> tuple[str, dict[str, Any]]:
     return markdown, dev
 
 
+def _full_page_change_result(
+    *,
+    interaction_type: str,
+    requested_target_id: str,
+    target_id: str,
+    target: dict[str, Any],
+    payload: dict[str, str],
+    message: str,
+    markdown: str,
+    dev: dict[str, Any],
+    current_url: str,
+) -> dict[str, Any]:
+    return {
+        "status": "success",
+        "interaction_type": interaction_type,
+        "requested_target_id": requested_target_id,
+        "target_id": target_id,
+        "target": target,
+        "payload": payload,
+        "page_changed": True,
+        "markdown": markdown,
+        "dev": dev,
+        "session_state": {"current_url": current_url},
+        "diffs": {"changed": [], "added": [], "deleted_element_count": 0},
+        "message": message,
+    }
+
+
 def _row_ids(row: dict[str, Any]) -> set[str]:
     ids = set()
     for key in ("interactable_ids", "image_ids"):
@@ -966,6 +1022,35 @@ def _wait_for_markdown_change(driver, before_markdown: str, timeout_seconds: flo
     return current
 
 
+def _wait_for_post_enter_settle(
+    driver: Any,
+    before_markdown: str,
+    before_url: str,
+    timeout_seconds: float = 5.0,
+    poll_seconds: float = 0.2,
+) -> str:
+    deadline = time.time() + timeout_seconds
+    current = before_markdown
+    seen_change = False
+    while time.time() < deadline:
+        current, _ = output_markdown(driver)
+        try:
+            current_url = getattr(driver, "current_url", "") or ""
+        except Exception:
+            current_url = ""
+        try:
+            ready_state = driver.execute_script("return document.readyState")
+        except Exception:
+            ready_state = ""
+        if current != before_markdown or (before_url and current_url != before_url):
+            seen_change = True
+        if seen_change and str(ready_state).lower() == "complete":
+            break
+        time.sleep(poll_seconds)
+    _wait_for_dom_quiet(driver)
+    return current
+
+
 def _resolve_target(interactables: Any, target_id: str) -> tuple[TargetRecord | None, dict[str, str], list[dict[str, Any]], list[dict[str, Any]]]:
     base_id, payload = _split_target_id(target_id)
     items, images = _catalog(interactables)
@@ -989,7 +1074,11 @@ def _action_from_payload(action: str, payload: dict[str, str]) -> dict[str, str]
         return {"value": value}
     if action == "input_text":
         value = payload.get("value") or payload.get("text") or ""
-        return {"value": value}
+        resolved = {"value": value}
+        click_enter = str(payload.get("click_enter", "")).strip().lower() in {"1", "true", "yes", "on"}
+        if click_enter:
+            resolved["click_enter"] = "true"
+        return resolved
     if action == "attach":
         value = _file_path_from_payload(payload)
         return {"path": value}
@@ -1115,6 +1204,7 @@ def interact(
     resolved_payload = _action_from_payload(normalized_action, payload)
     target_kind = target_record.kind
     before_markdown = markdown
+    before_url = getattr(driver, "current_url", "") or ""
     can_scope = _can_execute_script(driver)
     before_scope_html = _capture_scoped_html(driver, target)
     before_snapshot_markdown, before_snapshot_dev = _snapshot_page(driver)
@@ -1125,6 +1215,22 @@ def interact(
         if delay_seconds and float(delay_seconds) > 0:
             time.sleep(float(delay_seconds))
         after_snapshot_markdown, after_snapshot_dev = _snapshot_page(driver)
+        try:
+            current_url = getattr(driver, "current_url", "") or ""
+        except Exception:
+            current_url = ""
+        if before_url and current_url and current_url != before_url:
+            return _full_page_change_result(
+                interaction_type=normalized_action,
+                requested_target_id=target_id,
+                target_id=target.get("id", target_id),
+                target=target,
+                payload=resolved_payload,
+                message=message,
+                markdown=after_snapshot_markdown,
+                dev=after_snapshot_dev,
+                current_url=current_url,
+            )
         diffs = _row_state_diffs(before_snapshot_dev, after_snapshot_dev, target_id)
         if not _has_meaningful_diff(diffs) and before_snapshot_markdown != after_snapshot_markdown:
             diffs = _markdown_diffs(before_snapshot_markdown, after_snapshot_markdown)
@@ -1156,6 +1262,22 @@ def interact(
             time.sleep(float(delay_seconds))
         records = _stop_dom_mutation_tracking(driver)
         after_snapshot_markdown, after_snapshot_dev = _snapshot_page(driver)
+        try:
+            current_url = getattr(driver, "current_url", "") or ""
+        except Exception:
+            current_url = ""
+        if before_url and current_url and current_url != before_url:
+            return _full_page_change_result(
+                interaction_type=normalized_action,
+                requested_target_id=target_id,
+                target_id=target.get("id", target_id),
+                target=target,
+                payload=resolved_payload,
+                message=message or f"Toggled {target_kind} target.",
+                markdown=after_snapshot_markdown,
+                dev=after_snapshot_dev,
+                current_url=current_url,
+            )
         preview_diffs = _preview_diffs(target, normalized_action, "", markdown)
         record_diffs = _summarize_dom_mutations(records) if records else {"changed": [], "added": [], "deleted_element_count": 0}
         scoped_diffs = _scoped_markdown_diffs(driver, target, before_scope_html) if can_scope and before_scope_html else {"changed": [], "added": [], "deleted_element_count": 0}
@@ -1200,6 +1322,22 @@ def interact(
             time.sleep(float(delay_seconds))
         records = _stop_dom_mutation_tracking(driver)
         after_snapshot_markdown, after_snapshot_dev = _snapshot_page(driver)
+        try:
+            current_url = getattr(driver, "current_url", "") or ""
+        except Exception:
+            current_url = ""
+        if before_url and current_url and current_url != before_url:
+            return _full_page_change_result(
+                interaction_type=normalized_action,
+                requested_target_id=target_id,
+                target_id=target.get("id", target_id),
+                target=target,
+                payload=resolved_payload,
+                message=message or f"Attached file to {target.get('id', target_id)}.",
+                markdown=after_snapshot_markdown,
+                dev=after_snapshot_dev,
+                current_url=current_url,
+            )
         record_diffs = _summarize_dom_mutations(records) if records else {"changed": [], "added": [], "deleted_element_count": 0}
         scoped_diffs = _scoped_markdown_diffs(driver, target, before_scope_html) if can_scope and before_scope_html else {"changed": [], "added": [], "deleted_element_count": 0}
         snapshot_diffs = _row_state_diffs(before_snapshot_dev, after_snapshot_dev, target_id)
@@ -1254,11 +1392,113 @@ def interact(
             except Exception as exc:
                 _stop_dom_mutation_tracking(driver)
                 return _error_result(normalized_action, target_id, f"Could not type second half: {exc}")
-        if half_delay > 0:
-            time.sleep(half_delay)
-        _wait_for_dom_quiet(driver)
+        click_enter = str(resolved_payload.get("click_enter", "")).strip().lower() in {"1", "true", "yes", "on"}
+        if click_enter:
+            before_enter_url = getattr(driver, "current_url", "") or ""
+            time.sleep(0.05)
+            try:
+                element.send_keys(Keys.ENTER)
+            except Exception:
+                pass
+            try:
+                ActionChains(driver).send_keys(Keys.ENTER).perform()
+            except Exception:
+                pass
+            submitted = _submit_nearby_form()
+            if not submitted:
+                try:
+                    form = driver.execute_script("return arguments[0].form || arguments[0].closest('form');", element)
+                except Exception:
+                    form = None
+                if form is not None:
+                    try:
+                        submit_button = driver.execute_script(
+                            """
+                            const form = arguments[0];
+                            if (!form) return null;
+                            return form.querySelector('button[type="submit"]:not([disabled]), input[type="submit"]:not([disabled])');
+                            """,
+                            form,
+                        )
+                    except Exception:
+                        submit_button = None
+                    if submit_button is not None:
+                        try:
+                            driver.execute_script(
+                                """
+                                const form = arguments[0];
+                                const button = arguments[1];
+                                if (form && typeof form.requestSubmit === 'function' && button) {
+                                    form.requestSubmit(button);
+                                    return true;
+                                }
+                                return false;
+                                """,
+                                form,
+                                submit_button,
+                            )
+                            submitted = True
+                        except Exception:
+                            try:
+                                driver.execute_script("arguments[0].click();", submit_button)
+                                submitted = True
+                            except Exception:
+                                submitted = False
+                if not submitted:
+                    try:
+                        element.submit()
+                        submitted = True
+                    except Exception:
+                        submitted = False
+            if not submitted:
+                try:
+                    driver.execute_script(
+                        "arguments[0].dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', code: 'Enter', bubbles: true, cancelable: true}));",
+                        element,
+                    )
+                except Exception:
+                    pass
+            if not submitted:
+                try:
+                    driver.execute_script(
+                        "arguments[0].dispatchEvent(new KeyboardEvent('keyup', {key: 'Enter', code: 'Enter', bubbles: true, cancelable: true}));",
+                        element,
+                    )
+                except Exception:
+                    pass
+            after_second_markdown = _wait_for_post_enter_settle(
+                driver,
+                after_first_markdown,
+                before_enter_url,
+                timeout_seconds=max(5.0, float(delay_seconds) if delay_seconds else 0.0),
+            )
+            try:
+                _, after_second_dev = _snapshot_page(driver)
+            except Exception:
+                after_second_dev = after_first_dev
+        else:
+            if half_delay > 0:
+                time.sleep(half_delay)
+            _wait_for_dom_quiet(driver)
         records = _stop_dom_mutation_tracking(driver)
-        after_second_markdown, after_second_dev = _snapshot_page(driver)
+        if not click_enter:
+            after_second_markdown, after_second_dev = _snapshot_page(driver)
+        try:
+            current_url = getattr(driver, "current_url", "") or ""
+        except Exception:
+            current_url = ""
+        if click_enter and before_url and current_url and current_url != before_url:
+            return _full_page_change_result(
+                interaction_type=normalized_action,
+                requested_target_id=target_id,
+                target_id=target.get("id", target_id),
+                target=target,
+                payload=resolved_payload,
+                message=message,
+                markdown=after_second_markdown,
+                dev=after_second_dev,
+                current_url=current_url,
+            )
         preview_diffs = _preview_diffs(target, normalized_action, value, markdown)
         record_diffs = _summarize_dom_mutations(records) if records else {"changed": [], "added": [], "deleted_element_count": 0}
         scoped_diffs = _scoped_markdown_diffs(driver, target, before_scope_html) if can_scope and before_scope_html else {"changed": [], "added": [], "deleted_element_count": 0}
@@ -1292,6 +1532,22 @@ def interact(
             time.sleep(float(delay_seconds))
         records = _stop_dom_mutation_tracking(driver)
         after_snapshot_markdown, after_snapshot_dev = _snapshot_page(driver)
+        try:
+            current_url = getattr(driver, "current_url", "") or ""
+        except Exception:
+            current_url = ""
+        if before_url and current_url and current_url != before_url:
+            return _full_page_change_result(
+                interaction_type=normalized_action,
+                requested_target_id=target_id,
+                target_id=target.get("id", target_id),
+                target=target,
+                payload=resolved_payload,
+                message=message,
+                markdown=after_snapshot_markdown,
+                dev=after_snapshot_dev,
+                current_url=current_url,
+            )
         preview_diffs = _preview_diffs(target, normalized_action, "", markdown)
         record_diffs = _summarize_dom_mutations(records) if records else {"changed": [], "added": [], "deleted_element_count": 0}
         scoped_diffs = _scoped_markdown_diffs(driver, target, before_scope_html) if can_scope and before_scope_html else {"changed": [], "added": [], "deleted_element_count": 0}
@@ -1328,6 +1584,22 @@ def interact(
             time.sleep(float(delay_seconds))
         records = _stop_dom_mutation_tracking(driver)
         after_snapshot_markdown, after_snapshot_dev = _snapshot_page(driver)
+        try:
+            current_url = getattr(driver, "current_url", "") or ""
+        except Exception:
+            current_url = ""
+        if before_url and current_url and current_url != before_url:
+            return _full_page_change_result(
+                interaction_type=normalized_action,
+                requested_target_id=target_id,
+                target_id=target.get("id", target_id),
+                target=target,
+                payload=resolved_payload,
+                message=message,
+                markdown=after_snapshot_markdown,
+                dev=after_snapshot_dev,
+                current_url=current_url,
+            )
         preview_diffs = _preview_diffs(target, normalized_action, value, markdown)
         record_diffs = _summarize_dom_mutations(records) if records else {"changed": [], "added": [], "deleted_element_count": 0}
         scoped_diffs = _scoped_markdown_diffs(driver, target, before_scope_html) if can_scope and before_scope_html else {"changed": [], "added": [], "deleted_element_count": 0}
@@ -1351,3 +1623,4 @@ def interact(
         target_id,
         f"Unsupported interaction type: {interaction_type}",
     )
+

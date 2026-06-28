@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import unittest
 from unittest.mock import patch
+from unittest.mock import MagicMock
 
-from core.config import load_app_config, resolve_extract_request
-from core.logging import TreeLogger
+from shared.config import load_app_config, resolve_extract_request
+from shared.logging import TreeLogger
 from browser import linkedin_jobs as lj
 
 
@@ -50,7 +51,8 @@ class PipelineTests(unittest.TestCase):
         with (
             patch.object(lj, "_fast_filters_snapshot", return_value=current_snapshot),
             patch.object(lj, "_ensure_all_filters_menu_open", return_value={"modal_open": True}),
-            patch.object(lj, "_find_section_block", side_effect=lambda driver, section, verbose=True: seen_sections.append(section) or object()),
+            patch.object(lj, "_filters_scope", return_value=MagicMock()),
+            patch.object(lj, "_section_block_in_scope", side_effect=lambda scope, section, verbose=True: seen_sections.append(section) or object()),
             patch.object(lj, "_set_radio_group"),
             patch.object(lj, "_set_checkbox_group"),
             patch.object(lj, "_set_switch"),
@@ -100,7 +102,8 @@ class PipelineTests(unittest.TestCase):
         with (
             patch.object(lj, "_fast_filters_snapshot", return_value=current_snapshot),
             patch.object(lj, "_ensure_all_filters_menu_open", return_value={"modal_open": True}),
-            patch.object(lj, "_find_section_block", return_value=object()),
+            patch.object(lj, "_filters_scope", return_value=MagicMock()),
+            patch.object(lj, "_section_block_in_scope", return_value=object()),
             patch.object(lj, "_set_radio_group"),
             patch.object(lj, "_set_checkbox_group") as set_checkbox_group,
             patch.object(lj, "_set_switch"),

@@ -1,21 +1,27 @@
 # JobSeekr Fresh
 
-Objective: tools for an LLM that allow it to reliably understand a webpage, decide what to do, and interact with it through a minimal, deterministic action interface.
+Current work lives in a prototype layer plus a new shallow architecture scaffold.
 
+Start with the docs:
 
+- [docs/README.md](docs/README.md)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/current-repo-map.md](docs/current-repo-map.md)
 
-* Leave the existing notebook alone 
-* Add new test notebook to test features/new tools.
-* use importlib reload on corresponding tool lib in each cell
-* work on the html to markdown tool
-* work on a function that that takes input string(llm response) and parses "<cmd>example tool call(x, y, z)<cmd>"
-* work on a tool that allows llm to interact with the webpage
-eg. browser(action = "click", element\_id = "485")
-browser(action = "input\_text", element\_id = "485"input = "example@email.com")
-and toggle check box, click radio box, select from drop down, etc... keep tools simple for llm
-* make sure html to markdown prevents any duplicated lines under each other, unnecessary empty lines. keep response structured, make sure output is simple for llm
-* validate html-markdown completeness on various webpages, specifically on lazy load websites/drop down menus, etc...
-* also need file upload tool for the llm to upload documents eg. CV.pdf
-* Back/forward/reload tool
-* 
+The repo now has a target shape for:
 
+- `01 - frontend/`
+- `02 - api/`
+- `03 - worker/`
+- `04 - services/`
+- `05 - shared/`
+- `06 - infra/`
+- `07 - docs/`
+- `08 - notebooks/`
+- `09 - tests/`
+- `10 - config/`
+- `11 - scripts/`
+- `12 - legacy/`
+- `13 - Profile/`
+
+The current browser and notebook prototype is still available while the migration continues.

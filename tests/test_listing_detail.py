@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timezone
 import unittest
@@ -26,13 +26,13 @@ DETAIL_HTML = """
         <div class="job-details-jobs-unified-top-card__title-container">
           <h2 class="t-16 t-black t-bold truncate">Business Development Representative (EMEA)</h2>
         </div>
-        <div class="t-14 truncate">respond.io · EMEA (Remote)</div>
+        <div class="t-14 truncate">respond.io Â· EMEA (Remote)</div>
       </div>
 
       <div class="job-details-jobs-unified-top-card__primary-description-container">
         <div class="t-black--light mt2 job-details-jobs-unified-top-card__tertiary-description-container">
-          <span>EMEA · 5 days ago · Over 100 people clicked apply</span>
-          <p><span>Promoted by hirer</span> · <span>Responses managed off LinkedIn</span></p>
+          <span>EMEA Â· 5 days ago Â· Over 100 people clicked apply</span>
+          <p><span>Promoted by hirer</span> Â· <span>Responses managed off LinkedIn</span></p>
         </div>
       </div>
 
@@ -216,6 +216,9 @@ class ListingDetailTests(unittest.TestCase):
         self.assertEqual(_resolve_indexes(3, 2), [2])
         self.assertEqual(_resolve_indexes(3, 99), [2])
         self.assertEqual(_resolve_indexes(3, -1), [0, 1, 2])
+        self.assertEqual(_resolve_indexes(5, "1-3"), [1, 2, 3])
+        self.assertEqual(_resolve_indexes(5, [0, 2, 4]), [0, 2, 4])
+        self.assertEqual(_resolve_indexes(5, (2, 4)), [2, 3, 4])
 
     def test_parse_listing_detail(self):
         parsed = parse_listing_detail(
@@ -328,6 +331,27 @@ class ListingDetailTests(unittest.TestCase):
         self.assertEqual(len(result["dev"]["interactables"]), 2)
         self.assertEqual(len(result["ai"]), 2)
 
+    def test_extract_listing_detail_range_string(self):
+        driver = FakeDriver(
+            [
+                {"job_id": "1", "title": "First", "link": "https://www.linkedin.com/jobs/view/1/", "easy_apply": False},
+                {"job_id": "2", "title": "Second", "link": "https://www.linkedin.com/jobs/view/2/", "easy_apply": True},
+                {"job_id": "3", "title": "Third", "link": "https://www.linkedin.com/jobs/view/3/", "easy_apply": False},
+            ],
+            DETAIL_HTML,
+        )
+        result = extract_listing_detail(
+            driver,
+            {"listings": [c.listing for c in driver._cards]},
+            index="0-1",
+            delay_seconds=0,
+            delay_jitter=0,
+            verbose=False,
+        )
+        self.assertEqual(result["dev"]["index"], "0-1")
+        self.assertEqual(len(result["dev"]["interactables"]), 2)
+        self.assertEqual(len(result["ai"]), 2)
+
     def test_parse_listing_detail_easy_apply_button(self):
         html = DETAIL_HTML.replace(
             "Apply to Business Development Representative (EMEA) on company website",
@@ -342,3 +366,4 @@ class ListingDetailTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

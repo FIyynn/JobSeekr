@@ -4,10 +4,10 @@ import argparse
 import json
 from pathlib import Path
 
-from browser.driver import build_driver, close_driver
-from core.config import load_app_config, resolve_extract_request
-from core.pipeline import run_pipeline
-from storage.embedded_mongo import EmbeddedMongoStore
+from legacy.browser.driver import build_driver, close_driver
+from legacy.core.config import load_app_config, resolve_extract_request
+from legacy.core.pipeline import run_pipeline
+from legacy.storage.embedded_mongo import EmbeddedMongoStore
 
 
 def _vlog(verbose: bool, message: str) -> None:

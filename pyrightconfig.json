@@ -1,0 +1,14 @@
+{
+  "include": [
+    "."
+  ],
+  "exclude": [
+    ".venv",
+    "__pycache__",
+    "legacy"
+  ],
+  "extraPaths": [
+    "."
+  ],
+  "typeCheckingMode": "basic"
+}

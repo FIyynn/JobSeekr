@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 import unittest
 
-from browser.interact import interact, _choose_diff_summary, _row_state_diffs, _markdown_diffs, _diff_text, _click_stateful_live_target
-from browser.markdown import output_markdown
+from services.web.interact import interact, _choose_diff_summary, _row_state_diffs, _markdown_diffs, _diff_text, _click_stateful_live_target
+from services.web.markdown import output_markdown
 
 
 GENERIC_HTML = """

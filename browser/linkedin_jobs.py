@@ -16,8 +16,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 BASE_URL = "https://www.linkedin.com"
 JOBS_SEARCH_URL = "https://www.linkedin.com/jobs/search"
 GLOBAL_NAV_SELECTOR = "header#global-nav"
+DEFAULT_WAIT_SECONDS = 15
 KEYWORD_INPUT_SELECTOR = "input[aria-label='Search by title, skill, or company']"
 LOCATION_INPUT_SELECTOR = "input[aria-label='City, state, or zip code']"
+SEARCH_BUTTON_SELECTOR = "button.jobs-search-box__submit-button"
 ALL_FILTERS_SELECTOR = "button[aria-label^='Show all filters']"
 FILTER_MODAL_SELECTOR = "div[data-test-modal-container]"
 RESULT_TYPE_TRIGGER_SELECTOR = "button.search-reusables__vertical-select-trigger"
@@ -49,13 +51,13 @@ def _sync_log(verbose: bool, message: str, started_at: float | None = None) -> N
         print(f"[{stamp}] {message} (+{elapsed:.2f}s)", flush=True)
 
 
-def _wait(driver, selector: str, timeout: int = 20, verbose: bool = True):
+def _wait(driver, selector: str, timeout: int = DEFAULT_WAIT_SECONDS, verbose: bool = True):
     return WebDriverWait(driver, timeout).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, selector))
     )
 
 
-def _click_by_text(driver, tag_name: str, text: str, timeout: int = 20, verbose: bool = True):
+def _click_by_text(driver, tag_name: str, text: str, timeout: int = DEFAULT_WAIT_SECONDS, verbose: bool = True):
     WebDriverWait(driver, timeout).until(
         lambda d: any(
             text.lower() in element.text.strip().lower()
@@ -133,7 +135,7 @@ def open_jobs_search_page(
 ) -> dict[str, Any]:
     _vlog(verbose, f"page: open {url}")
     driver.get(url)
-    _wait(driver, GLOBAL_NAV_SELECTOR, verbose=verbose)
+    _wait(driver, GLOBAL_NAV_SELECTOR, timeout=DEFAULT_WAIT_SECONDS, verbose=verbose)
     _pause(delay_seconds, verbose=verbose)
     _vlog(verbose, "page: ready")
     return {"page_ready": True}
@@ -166,6 +168,30 @@ def set_location_input(
     element.send_keys(Keys.TAB)
     _pause(delay_seconds, verbose=verbose)
     return {"location_value": location}
+
+
+def click_search_button(driver, delay_seconds: float | int = 1, verbose: bool = True) -> dict[str, Any]:
+    _vlog(verbose, "search: click button start")
+    try:
+        button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, SEARCH_BUTTON_SELECTOR))
+        )
+    except Exception:
+        buttons = driver.find_elements(By.TAG_NAME, "button")
+        button = None
+        for candidate in buttons:
+            if not candidate.is_displayed():
+                continue
+            label = _normalize(candidate.get_attribute("aria-label") or candidate.text)
+            if label == "search" or label.endswith(" search") or label == "Search":
+                button = candidate
+                break
+        if button is None:
+            raise ValueError("Could not find the search button")
+    button.click()
+    _pause(delay_seconds, verbose=verbose)
+    _vlog(verbose, "search: clicked")
+    return {"search_clicked": True}
 
 
 def open_all_filters_menu(driver, delay_seconds: float | int = 1, verbose: bool = True) -> dict[str, Any]:

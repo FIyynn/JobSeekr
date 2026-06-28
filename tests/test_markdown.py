@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from browser.markdown import _remove_markdown_links, output_markdown
+from services.web.markdown import _remove_markdown_links, output_markdown
 
 
 class FakePageDriver:
@@ -346,6 +346,29 @@ class MarkdownTests(unittest.TestCase):
             remove_links=False,
         )
         self.assertIn("[a link](https://example.com/jobs)", markdown)
+
+    def test_output_markdown_skips_hidden_controls(self):
+        html = """
+        <html>
+          <body>
+            <button class="visually-hidden" aria-label="Hidden action">Hidden action</button>
+            <input type="hidden" id="secret" value="123">
+            <label class="sr-only" for="secret-text">Hidden text input</label>
+            <input id="secret-text" class="screen-reader-only" type="text" value="secret">
+            <button aria-label="Visible action">Visible action</button>
+          </body>
+        </html>
+        """
+        markdown, dev = output_markdown(FakePageDriver("https://example.com", html))
+        self.assertNotIn("Hidden action", markdown)
+        self.assertNotIn("Hidden text input", markdown)
+        self.assertNotIn("Hidden action [[", markdown)
+        self.assertNotIn("Hidden text input [[", markdown)
+        self.assertNotIn("[[i2]]", markdown)
+        self.assertNotIn("[[t1]]", markdown)
+        self.assertIn("Visible action [[i1]]", markdown)
+        self.assertEqual(dev["counts"]["interactables"], 1)
+        self.assertEqual(dev["interactables"][0]["text"], "Visible action")
 
     def test_output_markdown_removes_embedded_links_but_keeps_standalone_links(self):
         html = """

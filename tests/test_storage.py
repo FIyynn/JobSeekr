@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from storage.embedded_mongo import EmbeddedMongoStore
+from shared.storage import EmbeddedMongoStore
 
 
 class StorageTests(unittest.TestCase):
@@ -21,4 +21,3 @@ class StorageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
