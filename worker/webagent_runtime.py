@@ -13,6 +13,7 @@ from typing import Any
 from services.linkedin import linkedin
 from services.web import webagent
 import services.web.markdown as markdown_tools
+from shared.agent_prompts import resolve_agent_prompts_dir
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -64,13 +65,13 @@ def read_text(path: Path) -> str:
 
 
 def load_instruction_bundle(base_dir: Path | None = None) -> dict[str, str]:
-    root = base_dir or (REPO_ROOT / "tests" / "llm_test")
+    root = resolve_agent_prompts_dir(base_dir)
     return {
-        "webuse": read_text(root / "tool_instructions_webuse.md"),
-        "loop": read_text(root / "webagent_loop.md") if (root / "webagent_loop.md").exists() else read_text(root / "agent_loop.md"),
-        "plan": read_text(root / "webagent_plan.md") if (root / "webagent_plan.md").exists() else read_text(root / "agent_plan.md"),
-        "reflection": read_text(root / "webagent_reflection.md") if (root / "webagent_reflection.md").exists() else "",
-        "finalize": read_text(root / "webagent_finalize.md") if (root / "webagent_finalize.md").exists() else "",
+        "webuse": read_text(root / "webuse_tool_instructions.md"),
+        "loop": read_text(root / "webuse_loop.md"),
+        "plan": read_text(root / "webuse_plan.md"),
+        "reflection": read_text(root / "webuse_reflection.md"),
+        "finalize": read_text(root / "webuse_finalize.md"),
     }
 
 

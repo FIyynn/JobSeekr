@@ -4,6 +4,7 @@ Think privately. Do not expose chain-of-thought.
 
 Rules:
 - Use this phase after tool outputs.
+- Reflect on what has already been done before deciding whether to continue.
 - Readdress the current plan without repeating the initial planning block.
 - Say what has already been done, what evidence you have, and whether the task is complete.
 - Reuse the current search task id, query, filters, and fetched pages when deciding whether to continue.

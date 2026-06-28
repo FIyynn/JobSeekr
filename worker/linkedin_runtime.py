@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from services.linkedin import linkedin
+from shared.agent_prompts import resolve_agent_prompts_dir
 
 try:
     from tests.llm_test.llm_runtime import (
@@ -58,13 +59,13 @@ def read_text(path: Path) -> str:
 
 
 def load_instruction_bundle(base_dir: Path | None = None) -> dict[str, str]:
-    root = base_dir or BASE_DIR
+    root = resolve_agent_prompts_dir(base_dir)
     return {
-        "loop": read_text(root / "agent_loop.md"),
-        "plan": read_text(root / "agent_plan.md"),
-        "reflection": read_text(root / "agent_reflection.md"),
-        "finish": read_text(root / "agent_finish.md"),
-        "linkedin": read_text(root / "tool_instructions_linkedin.md"),
+        "loop": read_text(root / "linkedin_loop.md"),
+        "plan": read_text(root / "linkedin_plan.md"),
+        "reflection": read_text(root / "linkedin_reflection.md"),
+        "finish": read_text(root / "linkedin_finish.md"),
+        "linkedin": read_text(root / "linkedin_tool_instructions.md"),
         "examples": read_text(root / "linkedin_task_examples.md"),
     }
 
