@@ -25,7 +25,7 @@ Top-level areas, ordered from highest-level ownership to lowest-level implementa
 | 17 | `12 - legacy/storage/` | Legacy prototype embedded store |
 | 18 | `12 - legacy/runtime/` | Legacy runtime helpers from the prototype |
 | 19 | `12 - legacy/tests/` | Legacy copies of the notebook/test bundles |
-| 20 | `13 - Profile/` | Legacy user profile reference docs |
+| 20 | `profiles/1/` | Legacy user profile reference docs |
 | 21 | `dataflow.md` | Original task data-flow table |
 | 22 | `tasks.md` | Current implementation TODO notes |
 

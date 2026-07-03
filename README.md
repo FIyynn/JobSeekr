@@ -22,6 +22,6 @@ The repo now has a target shape for:
 - `10 - config/`
 - `11 - scripts/`
 - `12 - legacy/`
-- `13 - Profile/`
+- `profiles/1/`
 
 The current browser and notebook prototype is still available while the migration continues.

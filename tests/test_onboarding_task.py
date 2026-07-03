@@ -18,7 +18,7 @@ class OnboardingTaskTests(unittest.TestCase):
                 {
                     "task_name": "onboarding_profile_digitization",
                     "task_id": "test-onboarding-accuracy",
-                    "documents": [str(repo_root / "Profile")],
+                    "documents": [str(repo_root / "profiles" / "1")],
                 },
                 state_path=state_path,
                 verbose=False,
