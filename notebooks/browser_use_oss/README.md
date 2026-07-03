@@ -1,6 +1,6 @@
 # Browser Use OSS Notebook
 
-This folder is an isolated test harness for Browser Use OSS and the local llama.cpp OpenAI-compatible server.
+This folder is an isolated test harness for Browser Use OSS and the local OpenRouter or llama.cpp model runtime.
 
 Use the Jupyter kernel named `Python (browser_use_oss)`.
 
