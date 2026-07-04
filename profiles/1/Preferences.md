@@ -177,6 +177,7 @@
 # \- Fast promotion path
 
 # \- Exceptional learning opportunities
+# \- A slightly lower floor can still work when the role has standout growth and mentorship
 
 # 
 
@@ -209,6 +210,7 @@
 # 
 
 # \- within the UAE, Abu dhabi
+# \- Abu Dhabi can be fine for an unusually strong role
 
 # 
 
@@ -259,6 +261,7 @@
 # \- Clear documentation
 
 # \- Continuous learning
+# \- Prefer to review the details before anything is submitted
 
 # 
 
@@ -379,6 +382,7 @@
 # \- Legal employment in the UAE
 
 # \- Ethical and inclusive workplace
+# \- Roles without a clear standard employment setup are a poor fit
 
 # 
 
