@@ -18,6 +18,8 @@
 
 # \- AI/Data Solutions Engineer
 
+# \- Treat this as an entry-level / recent-graduate profile
+
 # 
 
 # \---
@@ -45,6 +47,10 @@
 # \- Aviation
 
 # \- Healthcare
+
+# \- Strong internal data teams and visible impact matter more than company name alone
+
+# \- Employers with formal graduate or training programs are especially attractive
 
 # 
 
@@ -142,6 +148,8 @@
 
 # \- Power BI
 
+# \- Prefer tools that line up with the current stack rather than a big tooling reset
+
 # 
 
 # \---
@@ -161,6 +169,8 @@
 # Comfortable
 
 # \- AED 20,000–30,000/month for a strong learning opportunity
+
+# \- The minimum acceptable salary should still feel meaningful for entry-level work in Dubai
 
 # 
 
@@ -210,7 +220,7 @@
 # 
 
 # \- within the UAE, Abu dhabi
-# \- Abu Dhabi can be fine for an unusually strong role
+# \- Abu Dhabi is acceptable for a strong role
 
 # 
 
@@ -240,6 +250,8 @@
 
 # \- Large multinational corporations
 
+# \- Big names are only interesting if the role has a real training path
+
 # 
 
 # \---
@@ -261,7 +273,9 @@
 # \- Clear documentation
 
 # \- Continuous learning
-# \- Prefer to review the details before anything is submitted
+# \- Do not auto-apply by default; shortlist for review first
+
+# \- A role is still acceptable if it is clearly junior-friendly and only asks for a little experience
 
 # 
 
@@ -383,6 +397,10 @@
 
 # \- Ethical and inclusive workplace
 # \- Roles without a clear standard employment setup are a poor fit
+
+# \- Always skip unpaid, commission-only, or vague talent-pool roles
+
+# \- If the role structure is unclear, it is probably not worth moving forward
 
 # 
 

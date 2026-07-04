@@ -55,6 +55,7 @@ Workers should persist:
 |---|---|
 | Generic web use | `browser/webagent.py`, `tests/llm_test/llm_runtime.py` |
 | LinkedIn listing search | `browser/linkedin.py`, `tests/llm_test_linkedin/linkedin_runtime.py` |
+| Candidate listing scoring | `tasks/candidate_scoring_task.py` |
 | LinkedIn detail fetch | `browser/linkedin.py`, `stages/listing_detail.py` |
 | Markdown page snapshot | `browser/markdown.py`, `parsers/page_markdown.py` |
 | Local persistence mock | `storage/embedded_mongo.py` |

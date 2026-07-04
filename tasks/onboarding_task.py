@@ -449,6 +449,102 @@ def _build_scoring_preferences(pref_sections: dict[str, list[str]], flat_prefere
     }
 
 
+def _build_digitized_user(profile: dict[str, Any], documents: list[dict[str, Any]], *, confidence_score: int, confidence_flags: dict[str, bool]) -> dict[str, Any]:
+    personal = profile.get("personal", {}) if isinstance(profile.get("personal"), dict) else {}
+    preferences = profile.get("preferences", {}) if isinstance(profile.get("preferences"), dict) else {}
+    scoring_preferences = profile.get("scoring_preferences", {}) if isinstance(profile.get("scoring_preferences"), dict) else {}
+    field_sources = profile.get("field_sources", {}) if isinstance(profile.get("field_sources"), dict) else {}
+    completeness_notes: list[str] = []
+    if not confidence_flags.get("has_summary"):
+        completeness_notes.append("summary")
+    if not confidence_flags.get("has_skills"):
+        completeness_notes.append("skills")
+    if not confidence_flags.get("has_education"):
+        completeness_notes.append("education")
+    if not confidence_flags.get("has_projects"):
+        completeness_notes.append("projects")
+    if not confidence_flags.get("has_preferred_roles"):
+        completeness_notes.append("preferred_roles")
+    if not confidence_flags.get("has_trade_offs"):
+        completeness_notes.append("trade_offs")
+    if not confidence_flags.get("has_scoring_preferences"):
+        completeness_notes.append("structured_preferences")
+
+    required_complete = not profile.get("missing_fields")
+    ready_for_scoring = required_complete and confidence_score >= 75
+
+    return {
+        "identity": {
+            "full_name": _coerce_text(personal.get("full_name")),
+            "headline": _coerce_text(personal.get("headline")),
+        },
+        "contact": {
+            "email": _coerce_text(personal.get("email")),
+            "phone": _coerce_text(personal.get("phone")),
+            "location": _coerce_text(personal.get("location")),
+        },
+        "links": {
+            "linkedin_url": _coerce_text(personal.get("linkedin_url")),
+            "github_url": _coerce_text(personal.get("github_url")),
+            "website_url": _coerce_text(personal.get("website_url")),
+        },
+        "summary": _coerce_text(profile.get("summary")),
+        "education": deepcopy(profile.get("education") if isinstance(profile.get("education"), list) else []),
+        "experience": deepcopy(profile.get("experience") if isinstance(profile.get("experience"), list) else []),
+        "projects": deepcopy(profile.get("projects") if isinstance(profile.get("projects"), list) else []),
+        "skills": _dedupe_keep_order(_coerce_text_list(profile.get("skills"))),
+        "languages": _dedupe_keep_order(_coerce_text_list(profile.get("languages"))),
+        "certifications": _dedupe_keep_order(_coerce_text_list(profile.get("certifications"))),
+        "preferences": {
+            "roles": _dedupe_keep_order(_coerce_text_list(preferences.get("preferred_roles"))),
+            "industries": {
+                "high_priority": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("industries", {}).get("high_priority"))),
+                "also_interested": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("industries", {}).get("also_interested"))),
+            },
+            "work_style": {
+                "ideal": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("work_style", {}).get("ideal"))),
+                "acceptable": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("work_style", {}).get("acceptable"))),
+            },
+            "compensation": {
+                "ideal": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("compensation", {}).get("ideal"))),
+                "comfortable": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("compensation", {}).get("comfortable"))),
+                "lower_if": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("compensation", {}).get("lower_if"))),
+            },
+            "commute": {
+                "preferred": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("commute", {}).get("preferred"))),
+                "comfortable": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("commute", {}).get("comfortable"))),
+                "would_relocate": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("commute", {}).get("would_relocate"))),
+            },
+            "company_size": {
+                "preferred": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("company_size", {}).get("preferred"))),
+                "also_interested": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("company_size", {}).get("also_interested"))),
+            },
+            "trade_offs": {
+                "salary": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("trade_offs", {}).get("salary"))),
+                "remote_work": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("trade_offs", {}).get("remote_work"))),
+                "job_title": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("trade_offs", {}).get("job_title"))),
+                "prestige": _dedupe_keep_order(_coerce_text_list(scoring_preferences.get("trade_offs", {}).get("prestige"))),
+            },
+        },
+        "constraints": {
+            "hard_no": _dedupe_keep_order(_coerce_text_list(preferences.get("hard_constraints"))),
+            "must_have": _dedupe_keep_order(_coerce_text_list(preferences.get("must_have"))),
+            "nice_to_haves": _dedupe_keep_order(_coerce_text_list(preferences.get("nice_to_haves"))),
+        },
+        "source_coverage": {
+            "field_sources": deepcopy(field_sources),
+            "documents": _compact_document_summaries(documents),
+        },
+        "completeness": {
+            "required_complete": required_complete,
+            "ready_for_scoring": ready_for_scoring,
+            "missing_fields": list(profile.get("missing_fields", [])),
+            "notes": completeness_notes,
+            "confidence_score": confidence_score,
+        },
+    }
+
+
 def _parse_profile_documents(documents: list[dict[str, Any]]) -> dict[str, Any]:
     combined_lines: list[str] = []
     by_name: dict[str, list[str]] = {}
@@ -838,7 +934,6 @@ def _merge_profile_sources(task_input: dict[str, Any], documents: list[dict[str,
         "experience_profile": experience_profile,
         "languages": languages,
         "certifications": certifications,
-        "documents": _compact_document_summaries(documents),
         "preferences": merged_preferences,
         "scoring_preferences": parsed_scoring_preferences,
         "scoring_profile": scoring_profile,
@@ -1040,12 +1135,6 @@ def run_onboarding_task(
     input_payload = deepcopy(task_input or {})
     path = Path(state_path or DEFAULT_STATE_PATH)
     task_id = _coerce_text(input_payload.get("task_id") or uuid.uuid4().hex[:12])
-    previous_state = read_task_state(path)
-    previous_asked_fields = _coerce_text_list(previous_state.get("asked_fields"))
-    input_asked_fields = _coerce_text_list(input_payload.get("asked_fields"))
-    merged_asked_fields = sorted({*previous_asked_fields, *input_asked_fields})
-    if merged_asked_fields:
-        input_payload["asked_fields"] = merged_asked_fields
     documents = _normalize_documents(input_payload.get("documents"))
     source_text = _build_source_text(documents, input_payload)
     state_writer = TaskStateWriter(path, heartbeat_seconds=heartbeat_seconds, verbose=verbose)
@@ -1076,10 +1165,11 @@ def run_onboarding_task(
         "status": "queued",
         "state_path": str(path),
         "input": _task_input_summary(input_payload),
+        "digitized_user": {},
+        "completeness": {},
         "result": {},
         "warnings": [],
         "missing_fields": [],
-        "questions": [],
     }
 
     try:
@@ -1095,7 +1185,7 @@ def run_onboarding_task(
 
         _vlog(verbose, f"task: documents={len(documents)}")
         state_writer.set(
-            phase="digitize",
+            phase="extract",
             step="normalize_documents",
             message=f"Normalized {len(documents)} document(s).",
             progress=25,
@@ -1105,7 +1195,6 @@ def run_onboarding_task(
         profile = _merge_profile_sources(input_payload, documents)
         confidence_score = int(profile.get("confidence_score") or 0)
         missing_fields = list(profile.get("missing_fields", []))
-        scoring_questions = _build_scoring_questions(profile, asked_fields=_coerce_text_list(input_payload.get("asked_fields")))
         warnings: list[str] = []
         if missing_fields:
             warnings.append(f"Missing required profile fields: {', '.join(missing_fields)}")
@@ -1127,90 +1216,56 @@ def run_onboarding_task(
             warnings.append(f"Incomplete profile sections: {', '.join(incomplete_quality_sections)}")
 
         state_writer.set(
-            phase="review",
-            step="build_profile",
-            message="Built profile draft for review.",
+            phase="normalize",
+            step="build_digitized_user",
+            message="Built digitized user draft.",
             progress=55,
             missing_fields=missing_fields,
             warnings=warnings,
-            result={"profile": profile},
+            result={},
         )
         time.sleep(max(0.0, step_delay_seconds))
 
-        asked_fields = _coerce_text_list(input_payload.get("asked_fields"))
-        if missing_fields:
-            questions = _build_questions(missing_fields, asked_fields=asked_fields)
-            asked_fields = sorted({*asked_fields, *[question["field"] for question in questions]})
-            prompt_pack = _build_prompt_pack(profile, input_payload, source_text)
-            result.update(
-                {
-                    "status": "waiting_for_user",
-                    "missing_fields": missing_fields,
-                    "warnings": warnings,
-                    "questions": questions,
-                    "scoring_questions": scoring_questions,
-                    "result": {
-                        "profile": profile,
-                        "prompt_pack": prompt_pack,
-                        "needs_user_review": True,
-                        "questions": questions,
-                        "scoring_questions": scoring_questions,
-                    },
-                }
-            )
-            state_writer.set(
-                status="waiting_for_user",
-                phase="review",
-                step="await_user_review",
-                message="Profile draft is ready for user review.",
-                progress=80,
-                result=result["result"],
-                questions=questions,
-                scoring_questions=scoring_questions,
-                asked_fields=asked_fields,
-            )
-            return deepcopy(result)
-
         state_writer.set(
-            phase="prompt_pack",
-            step="generate_prompt_pack",
-            message="Generating onboarding prompt pack draft.",
+            phase="finalize",
+            step="compose_output",
+            message="Composing digitized user handoff.",
             progress=75,
         )
         time.sleep(max(0.0, step_delay_seconds))
 
-        prompt_pack = _build_prompt_pack(profile, input_payload, source_text)
-        scoring_profile = profile.get("scoring_profile", {}) if isinstance(profile.get("scoring_profile"), dict) else {}
-        auto_apply_threshold = int(scoring_profile.get("auto_apply_threshold") or 80)
-        needs_user_review = bool(incomplete_quality_sections) or confidence_score < auto_apply_threshold
+        digitized_user = _build_digitized_user(
+            profile,
+            documents,
+            confidence_score=confidence_score,
+            confidence_flags=confidence_flags,
+        )
+        completeness = digitized_user["completeness"]
+        status = "partial" if missing_fields else "success"
         final_result = {
-            "profile": profile,
-            "prompt_pack": prompt_pack,
-            "needs_user_review": needs_user_review,
-            "review_notes": incomplete_quality_sections,
-            "questions": [],
-            "scoring_questions": scoring_questions,
+            "digitized_user": digitized_user,
+            "completeness": completeness,
         }
 
         result.update(
             {
-                "status": "success",
+                "status": status,
                 "missing_fields": missing_fields,
                 "warnings": warnings,
+                "digitized_user": digitized_user,
+                "completeness": completeness,
                 "result": final_result,
-                "questions": [],
-                "scoring_questions": scoring_questions,
             }
         )
         state_writer.set(
-            status="success",
-            phase="complete",
+            status=status,
+            phase="finalize",
             step="done",
             message="Onboarding task complete.",
             progress=100,
             result=final_result,
-            questions=[],
-            scoring_questions=scoring_questions,
+            missing_fields=missing_fields,
+            warnings=warnings,
         )
         return deepcopy(result)
     except Exception as exc:
@@ -1219,6 +1274,8 @@ def run_onboarding_task(
             {
                 "status": "failed",
                 "warnings": [message],
+                "digitized_user": {},
+                "completeness": {},
                 "result": {},
             }
         )

@@ -26,3 +26,8 @@
 - Explain what the code should do and the best fix in plain language.
 - If a problem is only a future risk, say so clearly.
 - If there are multiple issues, order them by importance.
+- After finishing edits, always run a quick sanity check on the changed files before replying.
+- For notebook edits, the fastest post-edit sanity check is one `shell_command` that parses each code cell with `ast` and flags missing names/imports before any runtime test.
+- Use `scripts/preflight_check.py` as the standard reusable preflight command for `.py` and `.ipynb` files after edits.
+- Preferred usage: `python scripts/preflight_check.py <path1> <path2> ...`
+- For onboarding-to-scoring handoff, treat `digitized_user` as the only stable payload key the scorer should consume.

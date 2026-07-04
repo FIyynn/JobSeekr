@@ -1,0 +1,20 @@
+{
+  "backend": "local",
+  "local": {
+    "model": "qwen3.5-9b",
+    "base_url": "http://127.0.0.1:8080/v1/chat/completions",
+    "api_key_path": "D:/_Desktop/api_key.txt",
+    "temperature": 0.2
+  },
+  "openai": {
+    "model": "gpt-5.4-mini",
+    "base_url": "https://api.openai.com/v1/chat/completions",
+    "api_key_path": "D:/_Desktop/api_key.txt",
+    "reasoning_effort": "low"
+  },
+  "openrouter": {
+    "model": "qwen/qwen3-30b-a3b-instruct-2507",
+    "base_url": "https://openrouter.ai/api/v1/chat/completions",
+    "api_key_path": "D:/_Desktop/api_key_openrouter.txt"
+  }
+}

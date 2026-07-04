@@ -689,7 +689,7 @@ def call_model_chat(
     timeout: int = 120,
 ) -> str:
     backend_name = str(backend or "").strip().casefold()
-    if backend_name in {"local", "llama", "llama.cpp", "llamacpp"}:
+    if backend_name in {"local", "llama", "llama.cpp", "llamacpp", "llama_cpp"}:
         return call_llama_chat(
             llama_base_url,
             llama_model,
@@ -698,7 +698,7 @@ def call_model_chat(
             max_tokens=max_completion_tokens,
             timeout=timeout,
         )
-    if backend_name in {"openai", "api"}:
+    if backend_name in {"openai", "api", "openrouter"}:
         if api_key_path is None:
             raise ValueError("api_key_path is required for the OpenAI backend.")
         return call_openai_chat(

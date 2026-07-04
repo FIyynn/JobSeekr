@@ -44,7 +44,17 @@ def load_app_config(config_dir: str | Path | None = None, verbose: bool = True) 
         "profile": load_json(base_dir / "profile.json", verbose=verbose),
         "extract": load_json(base_dir / "extract.json", verbose=verbose),
         "presets": load_json(base_dir / "presets.json", verbose=verbose),
+        "llm_backend": load_json(base_dir / "llm_backend.json", verbose=verbose),
     }
+
+
+def load_llm_backend_config(config_dir: str | Path | None = None, verbose: bool = True) -> dict[str, Any]:
+    if config_dir:
+        base_dir = Path(config_dir)
+    else:
+        base_dir = next((candidate for candidate in CONFIG_DIRS if candidate.exists()), CONFIG_DIRS[0])
+    _vlog(verbose, f"config: dir {base_dir}")
+    return load_json(base_dir / "llm_backend.json", verbose=verbose)
 
 
 def resolve_extract_request(
