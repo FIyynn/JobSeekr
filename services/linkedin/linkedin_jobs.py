@@ -600,19 +600,50 @@ def _matches_choice_name(candidate: str, target: str, verbose: bool = True) -> b
         return False
     if candidate == target:
         return True
-    return candidate in target or target in candidate
+    return False
 
 
 def _checkbox_names(checkbox, label, verbose: bool = True) -> list[str]:
     names = []
     if label is not None:
-        names.append(_label_text(label))
-        names.append(label.get_attribute("aria-label") or "")
-    names.append(checkbox.get_attribute("aria-label") or "")
-    names.append(checkbox.get_attribute("value") or "")
-    names.append(checkbox.get_attribute("name") or "")
-    names.append(checkbox.get_attribute("id") or "")
+        label_text = _label_text(label)
+        if label_text:
+            names.append(label_text)
+        aria_label = label.get_attribute("aria-label") or ""
+        if aria_label:
+            names.append(aria_label)
+    aria_label = checkbox.get_attribute("aria-label") or ""
+    if aria_label:
+        names.append(aria_label)
+    value = checkbox.get_attribute("value") or ""
+    if value:
+        names.append(value)
+    name = checkbox.get_attribute("name") or ""
+    if name:
+        names.append(name)
+    input_id = checkbox.get_attribute("id") or ""
+    if input_id:
+        names.append(input_id)
     return [name for name in names if _normalize(name)]
+
+
+def _checkbox_filter_text(item) -> str:
+    if item is None:
+        return ""
+    try:
+        hidden = item.find_element(By.CSS_SELECTOR, ".visually-hidden")
+        text = hidden.text.strip()
+        if text:
+            return re.sub(r"^Filter by\s*", "", text, flags=re.IGNORECASE).strip()
+    except Exception:
+        pass
+    label = None
+    try:
+        label = item.find_element(By.CSS_SELECTOR, "label")
+    except Exception:
+        label = None
+    text = _label_text(label) if label is not None else ""
+    return re.sub(r"^Filter by\s*", "", text, flags=re.IGNORECASE).strip()
 
 
 def _set_checkbox_group(
@@ -623,106 +654,86 @@ def _set_checkbox_group(
     verbose: bool = True,
 ) -> None:
     started_at = time.perf_counter()
-    _sync_log(verbose, "filters: checkbox scan start")
     desired = {}
     for item in inputs:
         name = _normalize(item.get("name", ""))
         if name:
             desired[name] = bool(item.get("state"))
-
-    records = []
-    for checkbox in block.find_elements(By.CSS_SELECTOR, "input[type='checkbox']"):
-        input_id = checkbox.get_attribute("id") or ""
-        label = None
-        if input_id:
+    desired_exact = {name: state for name, state in desired.items() if name}
+    max_passes = max(4, len(desired_exact) + 3)
+    for pass_index in range(max_passes):
+        scan_started_at = time.perf_counter()
+        _sync_log(verbose, f"filters: checkbox scan start pass {pass_index + 1}")
+        records = []
+        for item in block.find_elements(By.CSS_SELECTOR, "li.search-reusables__filter-value-item"):
+            checkbox = None
+            label = None
             try:
-                label = block.find_element(By.CSS_SELECTOR, f"label[for='{input_id}']")
+                checkbox = item.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+            except Exception:
+                continue
+            try:
+                label = item.find_element(By.CSS_SELECTOR, "label")
             except Exception:
                 label = None
-        if label is None:
-            try:
-                label = checkbox.find_element(By.XPATH, "./following-sibling::label[1]")
-            except Exception:
-                label = None
-        names = _checkbox_names(checkbox, label, verbose=verbose)
-        records.append((checkbox, label, names))
-    _sync_log(verbose, "filters: checkbox scan done", started_at)
+            filter_text = _checkbox_filter_text(item)
+            normalized_text = _normalize(filter_text)
+            desired_state = desired_exact.get(normalized_text, False)
+            records.append((item, checkbox, label, filter_text, desired_state))
+        _sync_log(verbose, f"filters: checkbox scan done pass {pass_index + 1}", scan_started_at)
 
-    def _matched_state(names: list[str]) -> bool:
-        for name in names:
-            for target_name, target_state in desired.items():
-                if _matches_choice_name(name, target_name, verbose=verbose):
-                    return target_state
-        return False
+        mismatches = []
+        for item, checkbox, label, filter_text, desired_state in records:
+            if checkbox.is_selected() != desired_state:
+                mismatches.append((item, checkbox, label, filter_text, desired_state))
 
-    to_fix = []
-    for checkbox, label, names in records:
-        desired_state = _matched_state(names)
-        if checkbox.is_selected() != desired_state:
-            to_fix.append((checkbox, label, names, desired_state))
+        if not mismatches:
+            _sync_log(verbose, f"filters: checkbox stable pass {pass_index + 1}", started_at)
+            return
 
-    if not to_fix:
-        return
-
-    pass_started_at = time.perf_counter()
-    _sync_log(verbose, f"filters: checkbox apply start ({len(to_fix)})")
-    for index, (checkbox, label, names, desired_state) in enumerate(to_fix):
-        try:
-            if driver is not None:
-                _click_fast(driver, checkbox)
-            else:
-                checkbox.click()
-        except Exception:
+        pass_started_at = time.perf_counter()
+        _sync_log(verbose, f"filters: checkbox apply start pass {pass_index + 1} ({len(mismatches)})")
+        for item, checkbox, label, filter_text, desired_state in mismatches:
+            _sync_log(
+                verbose,
+                f"filters: checkbox click {filter_text!r} -> {desired_state}",
+                pass_started_at,
+            )
             if label is not None:
                 if driver is not None:
-                    _click_fast(driver, label)
+                    driver.execute_script("arguments[0].click();", label)
                 else:
                     label.click()
             else:
-                raise
-    _pause(delay_seconds, verbose=verbose)
-    _sync_log(verbose, "filters: checkbox apply done", pass_started_at)
-
-    verify_started_at = time.perf_counter()
-    _sync_log(verbose, "filters: checkbox verify start")
-    remaining = []
-    for checkbox, label, names, desired_state in to_fix:
-        try:
-            current_state = checkbox.is_selected()
-        except Exception:
-            current_state = None
-        if current_state != desired_state:
-            remaining.append((checkbox, label, names, desired_state))
-
-    if not remaining:
-        _sync_log(verbose, "filters: checkbox verify done", verify_started_at)
-        return
-
-    retry_started_at = time.perf_counter()
-    _sync_log(verbose, f"filters: checkbox retry start ({len(remaining)})")
-    for index, (checkbox, label, names, desired_state) in enumerate(remaining):
-        if label is not None:
-            if driver is not None:
-                _click_fast(driver, label)
-            else:
-                label.click()
-        else:
-            if driver is not None:
-                _click_fast(driver, checkbox)
-            else:
                 checkbox.click()
-    _pause(delay_seconds, verbose=verbose)
-    _sync_log(verbose, "filters: checkbox retry done", retry_started_at)
+        _pause(delay_seconds, verbose=verbose)
+        _sync_log(verbose, f"filters: checkbox apply done pass {pass_index + 1}", pass_started_at)
 
-    final_started_at = time.perf_counter()
+    final_scan_started_at = time.perf_counter()
     _sync_log(verbose, "filters: checkbox final verify start")
-    for checkbox, label, names, desired_state in remaining:
+    final_records = []
+    for item in block.find_elements(By.CSS_SELECTOR, "li.search-reusables__filter-value-item"):
+        checkbox = None
+        label = None
         try:
-            if checkbox.is_selected() != desired_state:
-                raise RuntimeError("Could not sync checkbox group to the requested state")
-        except Exception as exc:
-            raise RuntimeError("Could not sync checkbox group to the requested state") from exc
-    _sync_log(verbose, "filters: checkbox final verify done", final_started_at)
+            checkbox = item.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+        except Exception:
+            continue
+        try:
+            label = item.find_element(By.CSS_SELECTOR, "label")
+        except Exception:
+            label = None
+        filter_text = _checkbox_filter_text(item)
+        normalized_text = _normalize(filter_text)
+        desired_state = desired_exact.get(normalized_text, False)
+        final_records.append((item, checkbox, label, filter_text, desired_state))
+    unresolved = []
+    for item, checkbox, label, filter_text, desired_state in final_records:
+        if checkbox.is_selected() != desired_state:
+            unresolved.append((filter_text, checkbox.is_selected(), desired_state))
+    if unresolved:
+        raise RuntimeError(f"Could not sync checkbox group to the requested state: {unresolved}")
+    _sync_log(verbose, "filters: checkbox final verify done", final_scan_started_at)
 
 
 def _set_radio_group(block, input_name: str, delay_seconds: float | int = 0, verbose: bool = True) -> None:
@@ -886,10 +897,24 @@ def sync_filters_state(
                     _vlog(verbose, f"{section}: radio unchanged")
                     continue
             elif section_type == "checkbox":
+                current_inputs = current_filter.get("inputs", [])
+                toggle_like = len(current_inputs) == 1 and _normalize(current_inputs[0].get("name", "")).casefold().startswith("toggle ")
                 current_map = _current_checkbox_map(current_filter)
                 desired_map = _desired_checkbox_map(target)
                 _vlog(verbose, f"{section}: checkbox state {sum(1 for state in current_map.values() if state)}/{len(current_map)} -> {sum(1 for state in desired_map.values() if state)}/{len(desired_map)}")
-                if current_map != desired_map:
+                if toggle_like:
+                    current_state = next(iter(current_map.values()), False)
+                    desired_state = next(iter(desired_map.values()), False) if desired_map else False
+                    if current_state != desired_state:
+                        phase_at = time.perf_counter()
+                        _sync_log(verbose, f"filters: {section} toggle start")
+                        _set_switch(block, desired_state, driver=driver, delay_seconds=delay_seconds, verbose=verbose)
+                        _sync_log(verbose, f"filters: {section} toggle done {'on' if current_state else 'off'} -> {'on' if desired_state else 'off'}", phase_at)
+                        changed_any = True
+                    else:
+                        _vlog(verbose, f"{section}: toggle unchanged")
+                        continue
+                elif current_map != desired_map:
                     phase_at = time.perf_counter()
                     _sync_log(verbose, f"filters: {section} checkbox start")
                     _set_checkbox_group(block, target.get("inputs", []) if target else [], driver=driver, delay_seconds=delay_seconds, verbose=verbose)

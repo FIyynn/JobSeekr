@@ -31,3 +31,25 @@
 - Use `scripts/preflight_check.py` as the standard reusable preflight command for `.py` and `.ipynb` files after edits.
 - Preferred usage: `python scripts/preflight_check.py <path1> <path2> ...`
 - For onboarding-to-scoring handoff, treat `digitized_user` as the only stable payload key the scorer should consume.
+
+## Current Issue Log
+
+When recording issues, use this exact schema:
+
+| Problem | Value | Difficulty | Should do | Best fix |
+|---|---|---|---|---|
+| ... | ... | ... | ... | ... |
+
+Use the icon ratings already defined above for `Value` and `Difficulty`.
+
+### Open Issues
+
+| Problem | Value | Difficulty | Should do | Best fix |
+|---|---|---|---|---|
+| Onboarding and scoring both treat `hard_no` as the only constraint bucket, so the scorer can confuse “hard no” with user preferences. The onboarding output should split constraints into `hard_yes` and `hard_no`, and the scoring stage should consume that split explicitly. | 🟩🟩🟩🟩 | 🟨 | Split hard requirements from hard exclusions in onboarding, then update the scorer instructions and parsing so each bucket has a distinct meaning. | Add separate `constraints.hard_yes` and `constraints.hard_no` fields in onboarding, then update scorer prompts and adapters to use those fields instead of a single mixed constraint bucket. |
+| `notebooks/candidate_pipeline_runtime.ipynb` prints too much dev chatter and nested debug payloads, which makes it hard to see what the agent actually did or whether something failed. The notebook output should be compact, readable, and non-duplicated. | 🟩🟩🟩 | 🟨🟨 | Keep only the information needed to understand the action taken, any warning/error, and the final result. | Trim notebook display helpers so they show one clean status line, one compact result summary, and one compact error block if needed. Remove repeated nested debug dumps. |
+
+### Reminder
+
+- Use [`notebooks/candidate_pipeline_runtime.ipynb`](notebooks/candidate_pipeline_runtime.ipynb) as the main notebook for tuning and testing agent behavior.
+- Run the notebook against different cases while adjusting instructions so we can see how the candidate-scoring agent behaves under change.

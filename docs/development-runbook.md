@@ -63,6 +63,7 @@ Find entry-level software engineering jobs in Dubai. Use filters when they help 
 - If pagination is too fast, tune only `go_to_page` delay.
 - If markdown shows hidden controls, check `parsers/page_markdown.py`.
 - If click/type diffs are noisy, check `browser/interact.py`.
+- If LinkedIn filter toggles behave oddly, rerun `notebooks/filter_sync_debug/runtime_test.ipynb` cell 2 only and inspect `notebooks/filter_sync_debug/filter_debug_tools.py`.
 
 ## Git Safety
 

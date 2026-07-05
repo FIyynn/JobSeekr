@@ -1,6 +1,6 @@
 # JobSeekr Fresh
 
-Current work lives in a prototype layer plus a new shallow architecture scaffold.
+Current work lives in a worker-side prototype plus a shallow target architecture scaffold.
 
 Start with the docs:
 
@@ -8,20 +8,28 @@ Start with the docs:
 - [docs/architecture.md](docs/architecture.md)
 - [docs/current-repo-map.md](docs/current-repo-map.md)
 
-The repo now has a target shape for:
+The active top-level layout is:
 
-- `01 - frontend/`
-- `02 - api/`
-- `03 - worker/`
-- `04 - services/`
-- `05 - shared/`
-- `06 - infra/`
-- `07 - docs/`
-- `08 - notebooks/`
-- `09 - tests/`
-- `10 - config/`
-- `11 - scripts/`
-- `12 - legacy/`
-- `profiles/1/`
+- `agent-system-prompts/`
+- `api/`
+- `browser/`
+- `config/`
+- `core/`
+- `docs/`
+- `frontend/`
+- `infra/`
+- `legacy/`
+- `notebooks/`
+- `parsers/`
+- `profiles/`
+- `runtime/`
+- `scripts/`
+- `services/`
+- `shared/`
+- `stages/`
+- `storage/`
+- `tasks/`
+- `tests/`
+- `worker/`
 
 The current browser and notebook prototype is still available while the migration continues.
