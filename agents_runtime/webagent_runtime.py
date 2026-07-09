@@ -17,7 +17,7 @@ from shared.agent_prompts import resolve_agent_prompts_dir
 
 
 BASE_DIR = Path(__file__).resolve().parent
-REPO_ROOT = BASE_DIR.parents[2]
+REPO_ROOT = BASE_DIR.parents[0]
 
 FINAL_RESPONSE_TAG = "final_response"
 CMD_TAG = "cmd"
@@ -72,7 +72,6 @@ def load_instruction_bundle(base_dir: Path | None = None) -> dict[str, str]:
         "plan": read_text(root / "webuse_plan.md"),
         "reflection": read_text(root / "webuse_reflection.md"),
         "finalize": read_text(root / "webuse_finalize.md"),
-        "tool": read_text(root / "webuse_tool_instructions.md"),
     }
 
 
@@ -138,331 +137,6 @@ def stop_requested() -> bool:
     except Exception:
         return False
     return False
-
-
-def _clean(value: Any) -> str:
-    return str(value or "").strip()
-
-
-def _ensure_runtime_memory(runtime: dict[str, Any] | None) -> dict[str, Any]:
-    runtime = runtime or {}
-    memory = runtime.setdefault("memory", {})
-    if not isinstance(memory, dict):
-        memory = {}
-        runtime["memory"] = memory
-    memory.setdefault("task", _clean(runtime.get("task", "")))
-    memory.setdefault("phase", _clean(runtime.get("phase", "planning")) or "planning")
-    memory.setdefault("plan", _clean(runtime.get("last_plan", "")))
-    memory.setdefault("last_tool", _clean(runtime.get("last_tool", "")))
-    memory.setdefault("last_result", "")
-    memory.setdefault("last_target_id", "")
-    memory.setdefault("findings", [])
-    memory.setdefault("errors", [])
-    memory.setdefault("current_web_state", {})
-    memory.setdefault("session_state", {})
-    memory.setdefault("last_reflection", "")
-    memory.setdefault("next_action", "")
-    return memory
-
-
-def _runtime_memory_lines(runtime: dict[str, Any] | None) -> list[str]:
-    if not runtime:
-        return []
-    memory = _ensure_runtime_memory(runtime)
-    lines: list[str] = []
-    task = _clean(memory.get("task", ""))
-    if task:
-        lines.append(f"task: {task}")
-    phase = _clean(memory.get("phase", ""))
-    if phase:
-        lines.append(f"phase: {phase}")
-    plan = _clean(memory.get("plan", "") or runtime.get("last_plan", ""))
-    if plan:
-        lines.append(f"plan: {plan[:1000]}")
-    last_tool = _clean(memory.get("last_tool", "") or runtime.get("last_tool", ""))
-    if last_tool:
-        lines.append(f"last tool: {last_tool}")
-    last_result = memory.get("last_result") or runtime.get("last_tool_result")
-    if isinstance(last_result, dict):
-        last_result = format_tool_result_for_llm(last_result, runtime)
-    last_result_text = _clean(last_result)
-    if last_result_text:
-        lines.append(f"last result: {last_result_text[:1000]}")
-    last_target_id = _clean(memory.get("last_target_id", ""))
-    if last_target_id:
-        lines.append(f"last target id: {last_target_id}")
-    last_reflection = _clean(memory.get("last_reflection", ""))
-    if last_reflection:
-        lines.append(f"last reflection: {last_reflection[:800]}")
-    next_action = _clean(memory.get("next_action", ""))
-    if next_action:
-        lines.append(f"next action: {next_action[:400]}")
-    current_web_state = memory.get("current_web_state") or runtime.get("current_web_state")
-    if isinstance(current_web_state, dict):
-        current_url = _clean(current_web_state.get("current_url", ""))
-        title = _clean(current_web_state.get("title", ""))
-        summary = _clean(current_web_state.get("summary", ""))
-        counts = current_web_state.get("counts")
-        if current_url:
-            lines.append(f"page url: {current_url}")
-        if title:
-            lines.append(f"page title: {title}")
-        if summary:
-            lines.append(f"page summary: {summary[:160]}")
-        if isinstance(counts, dict) and counts:
-            rendered_counts = ", ".join(f"{_clean(k)}={counts[k]}" for k in counts if _clean(k))
-            if rendered_counts:
-                lines.append(f"page counts: {rendered_counts}")
-    findings = memory.get("findings")
-    if isinstance(findings, list) and findings:
-        rendered = "; ".join(_clean(item) for item in findings[-5:] if _clean(item))
-        if rendered:
-            lines.append(f"findings: {rendered[:1000]}")
-    errors = memory.get("errors")
-    if isinstance(errors, list) and errors:
-        rendered = "; ".join(_clean(item) for item in errors[-3:] if _clean(item))
-        if rendered:
-            lines.append(f"errors: {rendered[:1000]}")
-    return lines
-
-
-def _sync_runtime_memory(
-    runtime: dict[str, Any] | None,
-    *,
-    phase: str | None = None,
-    plan_text: str | None = None,
-    tool_name: str | None = None,
-    tool_result: dict[str, Any] | None = None,
-    note: str | None = None,
-) -> None:
-    if runtime is None:
-        return
-    memory = _ensure_runtime_memory(runtime)
-    if phase:
-        memory["phase"] = _clean(phase) or memory.get("phase", "planning")
-    if plan_text is not None:
-        memory["plan"] = _clean(plan_text)
-        runtime["last_plan"] = _clean(plan_text)
-    if tool_name is not None:
-        memory["last_tool"] = _clean(tool_name)
-        runtime["last_tool"] = _clean(tool_name)
-    if tool_result is not None:
-        memory["last_result"] = tool_result
-        runtime["last_tool_result"] = tool_result
-        target_id = _clean(tool_result.get("target_id", "") or tool_result.get("requested_target_id", ""))
-        if target_id:
-            memory["last_target_id"] = target_id
-        session_state = tool_result.get("session_state")
-        if isinstance(session_state, dict):
-            memory["session_state"] = session_state
-        current_web_state = tool_result.get("current_web_state")
-        if isinstance(current_web_state, dict):
-            memory["current_web_state"] = current_web_state
-    if note:
-        note_text = _clean(note)
-        memory["last_reflection"] = note_text
-        match = re.search(r"(?im)^\s*next action:\s*(.+)$", note_text)
-        if match:
-            memory["next_action"] = _clean(match.group(1))
-        findings = memory.setdefault("findings", [])
-        if isinstance(findings, list):
-            findings.append(note_text)
-
-
-def _reset_task_runtime(runtime: dict[str, Any], task: str) -> None:
-    runtime["task"] = task
-    runtime["phase"] = "planning"
-    runtime["last_plan"] = ""
-    runtime["last_tool"] = ""
-    runtime["last_tool_result"] = None
-    runtime["stuck_counts"] = {}
-    runtime["current_web_state"] = {}
-    runtime["session_state"] = {}
-    runtime["session_outputs"] = []
-    memory = _ensure_runtime_memory(runtime)
-    memory["task"] = task
-    memory["phase"] = "planning"
-    memory["plan"] = ""
-    memory["last_tool"] = ""
-    memory["last_result"] = ""
-    memory["last_target_id"] = ""
-    memory["findings"] = []
-    memory["errors"] = []
-    memory["current_web_state"] = {}
-    memory["session_state"] = {}
-    memory["last_reflection"] = ""
-    memory["next_action"] = ""
-
-
-def _runtime_recent_lines(runtime: dict[str, Any] | None, limit: int = 8, width: int = 1200) -> list[str]:
-    if not runtime:
-        return []
-    session_outputs = runtime.get("session_outputs") or []
-    lines: list[str] = []
-    for entry in session_outputs[-limit:]:
-        if not isinstance(entry, dict):
-            continue
-        kind = _clean(entry.get("kind", "")) or "item"
-        label = _clean(entry.get("label", ""))
-        text = entry.get("text", "")
-        rendered = text if isinstance(text, str) else pretty_json(text)
-        rendered = _clean(rendered)
-        if rendered:
-            prefix = f"- {kind}"
-            if label:
-                prefix += f" {label}"
-            lines.append(f"{prefix}: {rendered[:width]}")
-    return lines
-
-
-def _runtime_state_lines(runtime: dict[str, Any] | None) -> list[str]:
-    if not runtime:
-        return []
-    lines: list[str] = []
-    session_state = runtime.get("session_state")
-    if isinstance(session_state, dict):
-        current_url = _clean(session_state.get("current_url", ""))
-        if current_url:
-            lines.append(f"url: {current_url}")
-        title = _clean(session_state.get("title", ""))
-        if title:
-            lines.append(f"title: {title}")
-        target_id = _clean(session_state.get("target_id", ""))
-        if target_id:
-            lines.append(f"target: {target_id}")
-        action = _clean(session_state.get("action", ""))
-        if action:
-            lines.append(f"action: {action}")
-    current_web_state = runtime.get("current_web_state")
-    if isinstance(current_web_state, dict):
-        for key in ("current_url", "title", "summary"):
-            value = _clean(current_web_state.get(key, ""))
-            if value:
-                lines.append(f"{key.replace('_', ' ')}: {value}")
-        counts = current_web_state.get("counts")
-        if isinstance(counts, dict) and counts:
-            rendered_counts = ", ".join(f"{_clean(k)}={counts[k]}" for k in counts if _clean(k))
-            if rendered_counts:
-                lines.append(f"counts: {rendered_counts}")
-    markdown_text = _clean(runtime.get("markdown_text", ""))
-    if markdown_text:
-        first_nonempty = next((line.strip() for line in markdown_text.splitlines() if line.strip()), "")
-        if first_nonempty:
-            lines.append(f"page: {first_nonempty[:160]}")
-    return lines
-
-
-def _phase_system_messages(bundle: dict[str, str], phase: str) -> list[str]:
-    phase_name = _clean(phase).casefold() or "planning"
-    if phase_name == "planning":
-        block = _clean(bundle.get("plan", ""))
-    elif phase_name == "reflection":
-        block = _clean(bundle.get("reflection", ""))
-    elif phase_name == "finalize":
-        block = _clean(bundle.get("finalize", ""))
-    elif phase_name == "tool":
-        block = "\n\n".join(
-            part
-            for part in (
-                _clean(bundle.get("tool", "")),
-                _clean(bundle.get("loop", "")),
-            )
-            if part
-        )
-    else:
-        block = _clean(bundle.get("loop", "")) or _clean(bundle.get("webuse", ""))
-    return [block] if block else []
-
-
-def _phase_user_prompt(task: str, phase: str, runtime: dict[str, Any] | None = None) -> str:
-    phase_name = _clean(phase).casefold() or "planning"
-    runtime = runtime or {}
-    memory_lines = _runtime_memory_lines(runtime)
-    task_text = _clean(task)
-    last_plan = _clean(runtime.get("last_plan", ""))
-    last_tool = _clean(runtime.get("last_tool", ""))
-    last_result = runtime.get("last_tool_result")
-    last_result_text = ""
-    if isinstance(last_result, dict):
-        last_result_text = format_tool_result_for_llm(last_result, runtime)
-    elif last_result:
-        last_result_text = _clean(last_result)
-    recent_lines = _runtime_recent_lines(runtime)
-    state_lines = _runtime_state_lines(runtime)
-    if memory_lines:
-        state_lines = list(state_lines) + ["", "Persistent runtime memory:", *memory_lines]
-
-    if phase_name == "planning":
-        lines = [
-            "Task:",
-            task_text,
-            "",
-            "Create the first action plan only.",
-            "Do not use tools yet.",
-            "Do not write command syntax or tool names.",
-            "Focus on the next page or control to inspect, what evidence matters, and why.",
-        ]
-        if state_lines:
-            lines.extend(["", "Current state:", *state_lines])
-        return "\n".join(lines)
-
-    if phase_name == "reflection":
-        lines = [
-            "Task:",
-            task_text,
-            "",
-            "Current plan:",
-            last_plan or "none yet",
-            "",
-            "Latest tool:",
-            last_tool or "none yet",
-            "",
-            "Latest result:",
-            last_result_text or "none yet",
-        ]
-        if state_lines:
-            lines.extend(["", "Current state:", *state_lines])
-        if recent_lines:
-            lines.extend(["", "Recent context:", *recent_lines])
-        lines.extend(
-            [
-                "",
-                "This is the reflection phase immediately after a tool call.",
-                "Reflect on what changed, what was completed, what is still missing, and whether the task is complete.",
-                "Do not rewrite the plan from scratch.",
-                "Start with exactly one line: Decision: complete or Decision: continue.",
-                "If continuing, keep it short and give the next action clearly as one tool-worthy step using the exact phrase 'Next action: click target_id ...' or 'Next action: type target_id ...'.",
-            ]
-        )
-        return "\n".join(lines)
-
-    if phase_name == "finalize":
-        lines = [
-            "Task:",
-            task_text,
-            "",
-            "Write only the final response.",
-            "Do not mention planning or tool syntax.",
-        ]
-        if state_lines:
-            lines.extend(["", "Current state:", *state_lines])
-        if recent_lines:
-            lines.extend(["", "Recent context:", *recent_lines])
-        return "\n".join(lines)
-
-    lines = [
-        "Task:",
-        task_text,
-        "",
-        "Use one tool call at a time.",
-        "Return exactly one <cmd>...</cmd> or one <final_response>...</final_response>.",
-        "If the previous reflection included a 'Next action:' line, follow it exactly, including the same target_id.",
-    ]
-    if state_lines:
-        lines.extend(["", "Current state:", *state_lines])
-    if recent_lines:
-        lines.extend(["", "Recent context:", *recent_lines])
-    return "\n".join(lines)
 
 
 def _extract_first_tag(text: str, tag: str) -> str | None:
@@ -580,8 +254,7 @@ def _extract_chat_completion_text(data: dict[str, Any]) -> str:
     message = choices[0].get("message") or {}
     content = message.get("content")
     if isinstance(content, str):
-        if content.strip():
-            return content
+        return content
     if isinstance(content, list):
         parts: list[str] = []
         for item in content:
@@ -593,10 +266,7 @@ def _extract_chat_completion_text(data: dict[str, Any]) -> str:
                     parts.append(str(text or ""))
         if parts:
             return "".join(parts)
-    reasoning_content = message.get("reasoning_content")
-    if isinstance(reasoning_content, str) and reasoning_content.strip():
-        return reasoning_content
-    return str(message.get("content") or reasoning_content or "")
+    return str(message.get("content") or "")
 
 
 def call_openai_chat(
@@ -675,13 +345,7 @@ def call_llama_chat(
     if not choices:
         raise RuntimeError("No choices returned from llama server.")
     message = choices[0].get("message") or {}
-    content = message.get("content")
-    if isinstance(content, str) and content.strip():
-        return content
-    reasoning_content = message.get("reasoning_content")
-    if isinstance(reasoning_content, str) and reasoning_content.strip():
-        return reasoning_content
-    return str(content or reasoning_content or "")
+    return str(message.get("content") or "")
 
 
 def call_model_chat(
@@ -775,13 +439,6 @@ def _refresh_snapshot(runtime: dict[str, Any]) -> None:
     runtime["markdown_text"] = markdown_text
     runtime["interactables"] = dev
     runtime["last_dev"] = dev
-    counts = dev.get("counts", {}) if isinstance(dev, dict) else {}
-    runtime["current_web_state"] = {
-        "current_url": getattr(driver, "current_url", "") or "",
-        "title": getattr(driver, "title", "") or "",
-        "summary": next((line.strip() for line in (markdown_text or "").splitlines() if line.strip()), ""),
-        "counts": counts if isinstance(counts, dict) else {},
-    }
 
 
 def execute_tool_call(tool_name: str, args: dict[str, Any], runtime: dict[str, Any]) -> dict[str, Any]:
@@ -807,12 +464,6 @@ def execute_tool_call(tool_name: str, args: dict[str, Any], runtime: dict[str, A
         runtime["markdown_text"] = result.get("markdown", "")
         runtime["interactables"] = result.get("dev", {})
         runtime["session_state"] = result.get("session_state", {})
-        runtime["current_web_state"] = {
-            "current_url": result.get("session_state", {}).get("current_url", "") if isinstance(result.get("session_state"), dict) else "",
-            "title": getattr(driver, "title", "") or "",
-            "summary": next((line.strip() for line in (result.get("markdown", "") or "").splitlines() if line.strip()), ""),
-            "counts": result.get("dev", {}).get("counts", {}) if isinstance(result.get("dev"), dict) else {},
-        }
         return result
 
     if tool_name == "webagent_click":
@@ -899,6 +550,176 @@ def execute_tool_call(tool_name: str, args: dict[str, Any], runtime: dict[str, A
     return {"status": "error", "message": f"Unsupported tool: {tool_name}"}
 
 
+def _clean(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _runtime_recent_lines(runtime: dict[str, Any] | None, limit: int = 8, width: int = 1200) -> list[str]:
+    if not runtime:
+        return []
+    session_outputs = runtime.get("session_outputs") or []
+    lines: list[str] = []
+    for entry in session_outputs[-limit:]:
+        if not isinstance(entry, dict):
+            continue
+        kind = _clean(entry.get("kind", "")) or "item"
+        label = _clean(entry.get("label", ""))
+        text = entry.get("text", "")
+        rendered = text if isinstance(text, str) else pretty_json(text)
+        rendered = _clean(rendered)
+        if rendered:
+            prefix = f"- {kind}"
+            if label:
+                prefix += f" {label}"
+            lines.append(f"{prefix}: {rendered[:width]}")
+    return lines
+
+
+def _runtime_state_lines(runtime: dict[str, Any] | None) -> list[str]:
+    if not runtime:
+        return []
+    lines: list[str] = []
+    session_state = runtime.get("session_state")
+    if isinstance(session_state, dict):
+        current_url = _clean(session_state.get("current_url", ""))
+        if current_url:
+            lines.append(f"url: {current_url}")
+        title = _clean(session_state.get("title", ""))
+        if title:
+            lines.append(f"title: {title}")
+        target_id = _clean(session_state.get("target_id", ""))
+        if target_id:
+            lines.append(f"target: {target_id}")
+        action = _clean(session_state.get("action", ""))
+        if action:
+            lines.append(f"action: {action}")
+    current_web_state = runtime.get("current_web_state")
+    if isinstance(current_web_state, dict):
+        for key in ("current_url", "title", "summary"):
+            value = _clean(current_web_state.get(key, ""))
+            if value:
+                lines.append(f"{key.replace('_', ' ')}: {value}")
+        counts = current_web_state.get("counts")
+        if isinstance(counts, dict) and counts:
+            rendered_counts = ", ".join(f"{_clean(k)}={counts[k]}" for k in counts if _clean(k))
+            if rendered_counts:
+                lines.append(f"counts: {rendered_counts}")
+    markdown_text = _clean(runtime.get("markdown_text", ""))
+    if markdown_text:
+        first_nonempty = next((line.strip() for line in markdown_text.splitlines() if line.strip()), "")
+        if first_nonempty:
+            lines.append(f"page: {first_nonempty[:160]}")
+    return lines
+
+
+def _phase_system_messages(bundle: dict[str, str], phase: str) -> list[str]:
+    phase_name = _clean(phase).casefold() or "planning"
+    blocks: list[str] = []
+    loop_block = _clean(bundle.get("loop", ""))
+    webuse_block = _clean(bundle.get("webuse", ""))
+    if loop_block:
+        blocks.append(loop_block)
+    if webuse_block:
+        blocks.append(webuse_block)
+    if phase_name == "planning":
+        block = _clean(bundle.get("plan", ""))
+    elif phase_name == "reflection":
+        block = _clean(bundle.get("reflection", ""))
+    elif phase_name == "finalize":
+        block = _clean(bundle.get("finalize", ""))
+    else:
+        block = ""
+    if block:
+        blocks.append(block)
+    return blocks
+
+
+def _phase_user_prompt(task: str, phase: str, runtime: dict[str, Any] | None = None) -> str:
+    phase_name = _clean(phase).casefold() or "planning"
+    runtime = runtime or {}
+    task_text = _clean(task)
+    last_plan = _clean(runtime.get("last_plan", ""))
+    last_tool = _clean(runtime.get("last_tool", ""))
+    last_result = runtime.get("last_tool_result")
+    last_result_text = ""
+    if isinstance(last_result, dict):
+        last_result_text = format_tool_result_for_llm(last_result, runtime)
+    elif last_result:
+        last_result_text = _clean(last_result)
+    recent_lines = _runtime_recent_lines(runtime)
+    state_lines = _runtime_state_lines(runtime)
+
+    if phase_name == "planning":
+        lines = [
+            "Task:",
+            task_text,
+            "",
+            "Create the first action plan only.",
+            "Do not use tools yet.",
+            "Do not write command syntax or tool names.",
+            "Focus on the next page or control to inspect, what evidence matters, and why.",
+        ]
+        if state_lines:
+            lines.extend(["", "Current state:", *state_lines])
+        return "\n".join(lines)
+
+    if phase_name == "reflection":
+        lines = [
+            "Task:",
+            task_text,
+            "",
+            "Current plan:",
+            last_plan or "none yet",
+            "",
+            "Latest tool:",
+            last_tool or "none yet",
+            "",
+            "Latest result:",
+            last_result_text or "none yet",
+        ]
+        if state_lines:
+            lines.extend(["", "Current state:", *state_lines])
+        if recent_lines:
+            lines.extend(["", "Recent context:", *recent_lines])
+        lines.extend(
+            [
+                "",
+                "Reflect on what has already been done, what is still missing, and whether the task is complete.",
+                "Do not repeat the initial planning block.",
+                "Start with exactly one line: Decision: complete or Decision: continue.",
+                "If continuing, keep it short and give the next action clearly.",
+            ]
+        )
+        return "\n".join(lines)
+
+    if phase_name == "finalize":
+        lines = [
+            "Task:",
+            task_text,
+            "",
+            "Write only the final response.",
+            "Do not mention planning or tool syntax.",
+        ]
+        if state_lines:
+            lines.extend(["", "Current state:", *state_lines])
+        if recent_lines:
+            lines.extend(["", "Recent context:", *recent_lines])
+        return "\n".join(lines)
+
+    lines = [
+        "Task:",
+        task_text,
+        "",
+        "Use one tool call at a time.",
+        "Return exactly one <cmd>...</cmd> or one <final_response>...</final_response>.",
+    ]
+    if state_lines:
+        lines.extend(["", "Current state:", *state_lines])
+    if recent_lines:
+        lines.extend(["", "Recent context:", *recent_lines])
+    return "\n".join(lines)
+
+
 def build_runtime_prompt(task: str, bundle: dict[str, str], phase: str = "planning", runtime: dict[str, Any] | None = None) -> str:
     return _phase_user_prompt(task, phase, runtime or {})
 
@@ -910,8 +731,6 @@ def build_messages(
     runtime: dict[str, Any] | None = None,
     include_plan: bool | None = None,
 ) -> list[dict[str, str]]:
-    runtime = runtime or {}
-    _ensure_runtime_memory(runtime)
     messages: list[dict[str, str]] = []
     for block in _phase_system_messages(bundle, phase):
         if block:
@@ -973,26 +792,11 @@ def format_tool_result_for_llm(result: dict[str, Any], runtime: dict[str, Any] |
         if markdown:
             lines.append("markdown:")
             lines.append(markdown)
-    elif runtime:
-        state_lines = _runtime_state_lines(runtime)
-        if state_lines:
-            lines.append("state:")
-            lines.extend(state_lines)
-        if result.get("page_changed") and isinstance(result.get("markdown"), str):
-            markdown = result.get("markdown", "").strip()
-            if markdown:
-                lines.append("markdown:")
-                lines.append(markdown)
 
     diffs = result.get("diffs")
     if isinstance(diffs, dict) and diffs:
         lines.append("diffs:")
         lines.extend(_format_diffs_plain(diffs))
-        changed = diffs.get("changed") or []
-        added = diffs.get("added") or []
-        deleted_count = diffs.get("deleted_element_count")
-        if not changed and not added and (deleted_count == 0 or deleted_count is None):
-            lines.append("note: likely redundant interaction; no visible page change.")
 
     if not lines:
         lines.append("status: unknown")
@@ -1012,11 +816,6 @@ def format_tool_result_for_display(result: dict[str, Any], runtime: dict[str, An
     if not is_interaction:
         formatted = format_tool_result_for_llm(result, runtime=runtime)
         return formatted
-    if result.get("page_changed") and isinstance(result.get("markdown"), str):
-        markdown = result.get("markdown", "").strip()
-        if markdown:
-            lines.append("markdown:")
-            lines.append(markdown)
     diffs = result.get("diffs")
     if isinstance(diffs, dict) and diffs:
         lines.append("diffs:")

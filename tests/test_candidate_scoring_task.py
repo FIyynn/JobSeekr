@@ -29,7 +29,7 @@ def _digitized_user() -> dict[str, object]:
             "company_size": {"preferred": ["Midsize"], "also_interested": ["Large"]},
             "trade_offs": {"salary": ["learning"], "remote_work": ["growth"], "job_title": ["ownership"], "prestige": ["brand"]},
         },
-        "constraints": {"hard_no": ["Commission-only"], "must_have": ["Growth"], "nice_to_haves": ["Mentorship"]},
+        "constraints": {"hard_yes": ["Growth"], "hard_no": ["Commission-only"], "must_have": ["Growth"], "nice_to_haves": ["Mentorship"]},
         "source_coverage": {"field_sources": {}, "documents": []},
         "completeness": {"required_complete": True, "ready_for_scoring": True, "missing_fields": [], "notes": [], "confidence_score": 95},
     }
@@ -59,13 +59,78 @@ def _candidates() -> list[dict[str, object]]:
     return rows
 
 
+def _relevance_gate_candidates() -> list[dict[str, object]]:
+    return [
+        {
+            "job_id": "keep-1",
+            "title": "Data Analyst",
+            "company": "Tech Co",
+            "location": "Dubai, Dubai, United Arab Emirates (On-site)",
+            "link": "https://www.linkedin.com/jobs/view/keep-1/",
+            "promoted": False,
+            "easy_apply": False,
+            "listed_on": None,
+        },
+        {
+            "job_id": "exclude-1",
+            "title": "Waiter",
+            "company": "Hospitality Group",
+            "location": "Dubai, Dubai, United Arab Emirates (On-site)",
+            "link": "https://www.linkedin.com/jobs/view/exclude-1/",
+            "promoted": False,
+            "easy_apply": False,
+            "listed_on": None,
+        },
+        {
+            "job_id": "keep-2",
+            "title": "IT Graduate Trainee",
+            "company": "Bank",
+            "location": "Dubai, Dubai, United Arab Emirates (On-site)",
+            "link": "https://www.linkedin.com/jobs/view/keep-2/",
+            "promoted": False,
+            "easy_apply": False,
+            "listed_on": None,
+        },
+        {
+            "job_id": "exclude-2",
+            "title": "Receptionist",
+            "company": "Clinic",
+            "location": "Dubai, Dubai, United Arab Emirates (On-site)",
+            "link": "https://www.linkedin.com/jobs/view/exclude-2/",
+            "promoted": False,
+            "easy_apply": False,
+            "listed_on": None,
+        },
+        {
+            "job_id": "exclude-3",
+            "title": "Real Estate Agent",
+            "company": "Brokerage",
+            "location": "Dubai, Dubai, United Arab Emirates (On-site)",
+            "link": "https://www.linkedin.com/jobs/view/exclude-3/",
+            "promoted": False,
+            "easy_apply": False,
+            "listed_on": None,
+        },
+        {
+            "job_id": "keep-3",
+            "title": "Business Analyst",
+            "company": "Consulting Group",
+            "location": "Dubai, Dubai, United Arab Emirates (On-site)",
+            "link": "https://www.linkedin.com/jobs/view/keep-3/",
+            "promoted": False,
+            "easy_apply": False,
+            "listed_on": None,
+        },
+    ]
+
+
 class CandidateScoringTaskTests(unittest.TestCase):
     def test_batches_rows_and_contract_are_stable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             state_path = Path(tmp_dir) / "candidate_scoring_task_state.json"
             clear_task_state(state_path)
 
-            def fake_judge(_digitized_user, batch, *, batch_index, batch_count, llm_settings):
+            def fake_judge(_digitized_user, batch, *, batch_index, batch_count, llm_settings, search_context=None):
                 if batch_index == 1:
                     excluded = [
                         {
@@ -119,20 +184,36 @@ class CandidateScoringTaskTests(unittest.TestCase):
             self.assertEqual(first["decision"], "exclude")
             self.assertEqual(first["exclude_reason_code"], "constraint_conflict")
             self.assertTrue(first["exclude_reason_text"])
+            self.assertIn("current", first["exclude_reason"])
+            self.assertIn("target", first["exclude_reason"])
+            self.assertTrue(first["exclude_reason_current"])
+            self.assertTrue(first["exclude_reason_target"])
 
             second = result["scored_candidates"][7]
             self.assertEqual(second["decision"], "exclude")
-            self.assertEqual(second["exclude_reason_code"], "constraint_conflict")
+            self.assertEqual(second["exclude_reason_code"], "role_irrelevance")
+            self.assertIn("current", second["exclude_reason"])
+            self.assertIn("target", second["exclude_reason"])
 
             third = result["scored_candidates"][12]
             self.assertEqual(third["decision"], "exclude")
             self.assertEqual(third["exclude_reason_code"], "constraint_conflict")
+            self.assertIn("current", third["exclude_reason"])
+            self.assertIn("target", third["exclude_reason"])
 
             batch_sizes = [batch["candidate_count"] for batch in result["batches"]]
             self.assertEqual(batch_sizes, [15, 15, 5])
             self.assertEqual(result["result"]["summary"]["batch_count"], 3)
             self.assertIn("reason_histogram", result["result"]["summary"])
-            self.assertTrue(all("decision" in row and "score" in row and "exclude_reason_code" in row for row in result["scored_candidates"]))
+            self.assertTrue(
+                all(
+                    "decision" in row
+                    and "score" in row
+                    and "exclude_reason_code" in row
+                    and "exclude_reason" in row
+                    for row in result["scored_candidates"]
+                )
+            )
             self.assertEqual(read_task_state(state_path)["status"], "success")
 
     def test_missing_digitized_user_is_partial_but_not_crashing(self) -> None:
@@ -155,6 +236,95 @@ class CandidateScoringTaskTests(unittest.TestCase):
             self.assertIn("digitized_user", result["missing_fields"])
             self.assertEqual(result["result"]["digitized_user"], {})
             self.assertEqual(read_task_state(state_path)["status"], "partial")
+
+    def test_search_context_is_preserved_and_sparse_vague_rows_are_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state_path = Path(tmp_dir) / "candidate_scoring_task_state.json"
+            clear_task_state(state_path)
+
+            def fake_judge(_digitized_user, batch, *, batch_index, batch_count, llm_settings, search_context=None):
+                self.assertEqual(search_context["keyword"], "software engineering")
+                self.assertEqual(search_context["location"], "Dubai")
+                self.assertEqual(search_context["filters"]["job_type"], "Full-time")
+                return [
+                    {
+                        "company": batch[0]["company"],
+                        "listing_id": batch[0]["listing_id"],
+                        "reason": "Unclear role structure with empty job_type field; may be vague talent-pool role",
+                    }
+                ], "{\"excluded\": []}", []
+
+            with patch("tasks.candidate_scoring_task._judge_batch_with_llm", side_effect=fake_judge):
+                result = run_candidate_scoring_task(
+                    {
+                        "task_name": "candidate_listing_scoring",
+                        "task_id": "test-candidate-search-context",
+                        "candidate_search_input": {
+                            "keyword": "software engineering",
+                            "location": "Dubai",
+                            "filters": {"job_type": "Full-time"},
+                            "pages": "1-3",
+                        },
+                        "digitized_user": _digitized_user(),
+                        "candidates": [_candidates()[0]],
+                    },
+                    state_path=state_path,
+                    verbose=False,
+                    step_delay_seconds=0,
+                )
+
+            self.assertEqual(result["status"], "success")
+            self.assertEqual(result["summary"]["total_candidates"], 1)
+            self.assertEqual(result["summary"]["excluded_count"], 0)
+            self.assertEqual(result["next_stage_candidates"], result["kept_candidates"])
+            self.assertEqual(result["input"]["search_context"]["keyword"], "software engineering")
+            self.assertEqual(result["input"]["search_context"]["location"], "Dubai")
+            self.assertEqual(result["input"]["search_context"]["filters"]["job_type"], "Full-time")
+            self.assertEqual(read_task_state(state_path)["status"], "success")
+
+    def test_role_relevance_gate_excludes_irrelevant_jobs_even_when_llm_keeps_all(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            state_path = Path(tmp_dir) / "candidate_scoring_task_state.json"
+            clear_task_state(state_path)
+
+            def fake_judge(_digitized_user, batch, *, batch_index, batch_count, llm_settings, search_context=None):
+                return [], "{\"excluded\": []}", []
+
+            with patch("tasks.candidate_scoring_task._judge_batch_with_llm", side_effect=fake_judge):
+                result = run_candidate_scoring_task(
+                    {
+                        "task_name": "candidate_listing_scoring",
+                        "task_id": "test-candidate-relevance-gate",
+                        "candidate_search_input": {
+                            "keyword": "software engineering",
+                            "location": "Dubai",
+                            "filters": {"experience_level": "Entry level", "job_type": "Full-time"},
+                            "pages": "1-1",
+                        },
+                        "digitized_user": _digitized_user(),
+                        "candidates": _relevance_gate_candidates(),
+                    },
+                    state_path=state_path,
+                    verbose=False,
+                    step_delay_seconds=0,
+                )
+
+            excluded_titles = {row["title"] for row in result["excluded_candidates"]}
+            kept_titles = {row["title"] for row in result["kept_candidates"]}
+            self.assertIn("Waiter", excluded_titles)
+            self.assertIn("Receptionist", excluded_titles)
+            self.assertIn("Real Estate Agent", excluded_titles)
+            self.assertIn("Data Analyst", kept_titles)
+            self.assertIn("IT Graduate Trainee", kept_titles)
+            self.assertIn("Business Analyst", kept_titles)
+
+            waiter = next(row for row in result["scored_candidates"] if row["title"] == "Waiter")
+            self.assertEqual(waiter["decision"], "exclude")
+            self.assertEqual(waiter["exclude_reason_code"], "role_irrelevance")
+            self.assertTrue(waiter["exclude_reason_current"])
+            self.assertTrue(waiter["exclude_reason_target"])
+            self.assertIn("target", waiter["exclude_reason"])
+            self.assertEqual(read_task_state(state_path)["status"], "success")
 
 
 if __name__ == "__main__":

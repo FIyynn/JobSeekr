@@ -29,7 +29,7 @@ def _digitized_user() -> dict[str, object]:
             "company_size": {"preferred": ["Midsize"], "also_interested": ["Large"]},
             "trade_offs": {"salary": ["learning"], "remote_work": ["growth"], "job_title": ["ownership"], "prestige": ["brand"]},
         },
-        "constraints": {"hard_no": ["Commission-only", "Unpaid"], "must_have": ["Growth"], "nice_to_haves": ["Mentorship"]},
+        "constraints": {"hard_yes": ["Growth"], "hard_no": ["Commission-only", "Unpaid"], "must_have": ["Growth"], "nice_to_haves": ["Mentorship"]},
         "source_coverage": {"field_sources": {}, "documents": []},
         "completeness": {"required_complete": True, "ready_for_scoring": True, "missing_fields": [], "notes": [], "confidence_score": 95},
     }

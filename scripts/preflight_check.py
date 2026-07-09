@@ -26,6 +26,7 @@ REPO_IMPORT_PREFIXES = {
     "storage",
     "tasks",
     "tests",
+    "agents_runtime",
     "worker",
 }
 

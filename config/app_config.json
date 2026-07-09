@@ -1,0 +1,135 @@
+{
+  "chrome": {
+    "headless": false,
+    "use_stealth": true,
+    "version_main": 149,
+    "page_load_timeout_seconds": 15,
+    "wait_timeout_seconds": 20,
+    "start_maximized": true,
+    "profile_dir": "runtime/chrome_user_data"
+  },
+  "user": {
+    "user_dir": "profiles"
+  },
+  "paths": {
+    "runtime_root": "runtime",
+    "agents_root": "runtime/agents",
+    "mongo_file": "runtime/mongo_store.json",
+    "task_state_root": "runtime/task_states",
+    "notebook_artifact_root": "runtime/notebook_artifacts"
+  },
+  "llm_backend": {
+    "local": {
+      "server_executable": "E:/llama.cpp/llama-server.exe",
+      "model_path": "E:/HF_cache/external_models/qewn3.5/Qwen3.5-9B.Q4_K_M.gguf",
+      "host": "127.0.0.1",
+      "port": 8080,
+      "context_size": 20000,
+      "predict_tokens": 16384,
+      "gpu_layers": 999,
+      "parallel": 4,
+      "cont_batching": true,
+      "batch_size": 2048,
+      "ubatch_size": 512,
+      "api_base_url": "http://127.0.0.1:8080/v1/chat/completions"
+    }
+  },
+  "llm": {
+    "provider": "local",
+    "model": "qwen3.5-9b",
+    "base_url": "http://127.0.0.1:8080/v1/chat/completions",
+    "api_key_path": "D:/_Desktop/api_key.txt",
+    "max_output_tokens": 12288,
+    "context_window": 20000,
+    "temperature": 0.2,
+    "timeout_seconds": 120,
+    "batch_size": 1
+  },
+  "agent_onboarding": {
+    "agent_dir": "onboarding",
+    "input_mode": "documents_and_overrides",
+    "output_mode": "digitized_user_only",
+    "heartbeat_seconds": 1,
+    "step_delay_seconds": 0.2,
+    "llm": {
+      "provider": "local",
+      "model": "qwen3.5-9b",
+      "base_url": "http://127.0.0.1:8080/v1/chat/completions",
+      "api_key_path": "D:/_Desktop/api_key.txt",
+      "max_output_tokens": 12288,
+      "context_window": 20000,
+      "temperature": 0.0,
+      "timeout_seconds": 360,
+      "batch_size": 1
+    }
+  },
+  "agent_search_query": {
+    "agent_dir": "search_query",
+    "max_query_count": 5,
+    "max_page_count": 3,
+    "max_listing_count": 60,
+    "dedupe_by_listing_id": true,
+    "verbose": false,
+    "llm": {
+      "provider": "local",
+      "model": "qwen3.5-9b",
+      "base_url": "http://127.0.0.1:8080/v1/chat/completions",
+      "api_key_path": "D:/_Desktop/api_key.txt",
+      "max_output_tokens": 1024,
+      "context_window": 20000,
+      "temperature": 0.2,
+      "timeout_seconds": 120,
+      "batch_size": 1
+    }
+  },
+  "agent_candidate_scoring": {
+    "agent_dir": "candidate_scoring",
+    "batch_size": 15,
+    "max_output_tokens": 512,
+    "verbose": false,
+    "llm": {
+      "provider": "local",
+      "model": "qwen3.5-9b",
+      "base_url": "http://127.0.0.1:8080/v1/chat/completions",
+      "api_key_path": "D:/_Desktop/api_key.txt",
+      "max_output_tokens": 512,
+      "context_window": 20000,
+      "temperature": 0.1,
+      "timeout_seconds": 120,
+      "batch_size": 1
+    }
+  },
+  "task_fetch_listing_details": {
+    "agent_dir": "detail_fetch",
+    "delay_seconds": 13,
+    "jitter_seconds": 4,
+    "verbose": false
+  },
+  "agent_score_detailed_listings": {
+    "agent_dir": "detail_scoring",
+    "batch_size": 10,
+    "max_output_tokens": 1024,
+    "verbose": false,
+    "llm": {
+      "provider": "local",
+      "model": "qwen3.5-9b",
+      "base_url": "http://127.0.0.1:8080/v1/chat/completions",
+      "api_key_path": "D:/_Desktop/api_key.txt",
+      "max_output_tokens": 1024,
+      "context_window": 20000,
+      "temperature": 0.1,
+      "timeout_seconds": 120,
+      "batch_size": 1
+    }
+  },
+  "dev": {
+    "enabled": true,
+    "save_raw_inputs": true,
+    "save_raw_outputs": true,
+    "save_intermediate_state": true,
+    "save_llm_messages": true,
+    "show_progress": true,
+    "show_verbose_logs": false,
+    "retain_cache": true
+  }
+}

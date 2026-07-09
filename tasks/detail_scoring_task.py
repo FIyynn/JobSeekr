@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from core.config import load_app_config
-from worker.webagent_runtime import call_model_chat_with_retry
+from agents_runtime.webagent_runtime import call_model_chat_with_retry
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -243,9 +243,24 @@ def _normalize_digitized_user(task_input: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, dict):
             nested = value.get("digitized_user")
             if isinstance(nested, dict):
-                return deepcopy(nested)
-            if key != "profile" or any(k in value for k in ("identity", "contact", "preferences", "constraints")):
-                return deepcopy(value)
+                value = nested
+            elif key == "profile" and not any(k in value for k in ("identity", "contact", "preferences", "constraints")):
+                continue
+            result = deepcopy(value)
+            constraints = result.get("constraints") if isinstance(result.get("constraints"), dict) else {}
+            if isinstance(constraints, dict):
+                hard_yes = _dedupe_keep_order(_coerce_text_list(constraints.get("hard_yes")) + _coerce_text_list(constraints.get("must_have")))
+                hard_no = _dedupe_keep_order(_coerce_text_list(constraints.get("hard_no")))
+                if not hard_yes and not hard_no and constraints.get("hard_constraints") is not None:
+                    split_yes, split_no = _split_hard_constraints(constraints.get("hard_constraints"))
+                    hard_yes = split_yes
+                    hard_no = split_no
+                result.setdefault("constraints", {})
+                result["constraints"]["hard_yes"] = hard_yes
+                result["constraints"]["hard_no"] = hard_no
+                if "must_have" in result["constraints"] or hard_yes:
+                    result["constraints"]["must_have"] = hard_yes
+            return result
     result = task_input.get("result")
     if isinstance(result, dict):
         nested = result.get("digitized_user")
@@ -308,6 +323,35 @@ def _extract_detail_rows(task_input: dict[str, Any]) -> list[dict[str, Any]]:
         row["detail"] = detail
         rows.append(row)
     return rows
+
+
+def _split_hard_constraints(items: Any) -> tuple[list[str], list[str]]:
+    negative_markers = (
+        "skip",
+        "avoid",
+        "do not",
+        "don't",
+        "not ",
+        "without",
+        "unpaid",
+        "commission-only",
+        "commission only",
+        "vague",
+        "poor fit",
+        "not worth",
+        "unclear",
+        "never",
+        "no ",
+    )
+    hard_yes: list[str] = []
+    hard_no: list[str] = []
+    for item in _dedupe_keep_order(_coerce_text_list(items)):
+        lowered = item.casefold()
+        if any(marker in lowered for marker in negative_markers):
+            hard_no.append(item)
+        else:
+            hard_yes.append(item)
+    return _dedupe_keep_order(hard_yes), _dedupe_keep_order(hard_no)
 
 
 def _normalize_llm_settings(task_input: dict[str, Any]) -> dict[str, Any]:
@@ -499,8 +543,8 @@ def _compute_sections(row: dict[str, Any], digitized_user: dict[str, Any]) -> tu
     would_relocate = _coerce_text_list((user_preferences.get("commute") or {}).get("would_relocate"))
     preferred_company_size = _coerce_text_list((user_preferences.get("company_size") or {}).get("preferred"))
     company_also_interested = _coerce_text_list((user_preferences.get("company_size") or {}).get("also_interested"))
+    hard_yes = _coerce_text_list(user_constraints.get("hard_yes") or user_constraints.get("must_have"))
     hard_no = _coerce_text_list(user_constraints.get("hard_no"))
-    must_have = _coerce_text_list(user_constraints.get("must_have"))
 
     title = _coerce_text(listing.get("title") or detail.get("title"))
     company = _coerce_text(listing.get("company") or detail.get("company") or company_profile.get("name"))
@@ -613,12 +657,16 @@ def _compute_sections(row: dict[str, Any], digitized_user: dict[str, Any]) -> tu
     risk_hits = [term for term in RISK_TERMS if term in blob_lower]
     if risk_hits:
         risk_signals.extend(f"Risk term: {term}" for term in risk_hits[:5])
-    if _contains_any(blob_lower, hard_no + must_have):
-        risk_signals.append("User hard constraint mention found.")
+    if _contains_any(blob_lower, hard_no):
+        risk_signals.append("User hard-no constraint mention found.")
+    if _contains_any(blob_lower, hard_yes):
+        risk_signals.append("User hard-yes requirement mention found.")
     if not _coerce_text(detail.get("job_description", {}).get("raw_text") if isinstance(detail.get("job_description"), dict) else detail.get("job_description")):
         risk_signals.append("Missing or thin job description.")
-    if risk_hits or _contains_any(blob_lower, hard_no + must_have):
+    if risk_hits or _contains_any(blob_lower, hard_no):
         risk_result = "no"
+    elif _contains_any(blob_lower, hard_yes):
+        risk_result = "partial"
     elif _coerce_text(detail.get("job_description", {}).get("raw_text") if isinstance(detail.get("job_description"), dict) else detail.get("job_description")):
         risk_result = "yes"
     else:
@@ -702,7 +750,9 @@ def _judge_batch_with_llm(
 
 def _hard_fallback_exclusions(batch: list[dict[str, Any]], digitized_user: dict[str, Any]) -> list[dict[str, str]]:
     excluded: list[dict[str, str]] = []
-    hard_no = _coerce_text_list((digitized_user.get("constraints") if isinstance(digitized_user.get("constraints"), dict) else {}).get("hard_no"))
+    constraints = digitized_user.get("constraints") if isinstance(digitized_user.get("constraints"), dict) else {}
+    hard_yes = _coerce_text_list(constraints.get("hard_yes") or constraints.get("must_have"))
+    hard_no = _coerce_text_list(constraints.get("hard_no"))
     for row in batch:
         summary = _detail_row_summary(row)
         blob = " | ".join([summary["title"], summary["company"], summary["location"], summary["detail_text"]]).casefold()
@@ -712,7 +762,16 @@ def _hard_fallback_exclusions(batch: list[dict[str, Any]], digitized_user: dict[
                 {
                     "company": summary["company"],
                     "listing_id": summary["listing_id"],
-                    "reason": f"Hard constraint conflict: {conflict}.",
+                    "reason": f"Hard no conflict: {conflict}.",
+                }
+            )
+            continue
+        if _contains_any(blob, tuple(hard_yes)) and any(term in blob for term in ("internship", "part-time", "part time", "temporary", "contract")):
+            excluded.append(
+                {
+                    "company": summary["company"],
+                    "listing_id": summary["listing_id"],
+                    "reason": "Hard yes requirement conflicts with listing type.",
                 }
             )
             continue

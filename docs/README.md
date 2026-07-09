@@ -1,6 +1,6 @@
 # JobSeekr Fresh Documentation
 
-This directory is the project handoff map. It explains the target architecture, the current prototype, the agent runtime loops, wrapped tools, state handling, storage plan, and MVP work sequence.
+This directory is the documentation index. It covers the target architecture, the current prototype, runtime loops, tool contracts, state handling, storage, and implementation sequence.
 
 Read in this order when starting work:
 

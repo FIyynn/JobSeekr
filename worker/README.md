@@ -1,3 +1,4 @@
-# Worker
+# Worker (compatibility package)
 
-Reserved for the service that owns workflows, LLM loops, browser orchestration, persistence, and task execution.
+This package re-exports the runtime loops from gents_runtime/ for backward compatibility.
+

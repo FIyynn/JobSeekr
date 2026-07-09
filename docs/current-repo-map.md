@@ -1,6 +1,6 @@
 # Current Repo Map
 
-The current repo is a prototype of the worker-side tooling and LLM runtimes. It is not yet the full distributed app.
+The current repo is a prototype of the agent runtime tooling and LLM runtimes. It is not yet the full distributed app.
 
 Top-level areas in the current repo, ordered from highest-level ownership to lowest-level implementation detail:
 
@@ -8,7 +8,7 @@ Top-level areas in the current repo, ordered from highest-level ownership to low
 |---:|---|---|
 | 01 | `frontend/` | Frontend app and UI entry points |
 | 02 | `api/` | API service boundary and request intake |
-| 03 | `worker/` | Worker orchestration, runtime loops, and task execution |
+| 03 | `agents_runtime/` | Agent orchestration, runtime loops, and task execution |
 | 04 | `services/` | Helper services for `web`, `linkedin`, and `llm` |
 | 05 | `shared/` | Common config, logging, pipeline, and storage helpers |
 | 06 | `infra/` | Docker, Mongo, and queue wiring placeholders |
@@ -39,12 +39,12 @@ Important current modules:
 | `browser/linkedin_jobs.py` | Low-level LinkedIn browser actions |
 | `browser/linkedin.py` | High-level LinkedIn wrapper tools |
 | `services/linkedin/listing_detail.py` | LinkedIn listing detail parser |
-| `worker/webagent_runtime.py` | Generic webagent runtime loop utilities |
-| `worker/linkedin_runtime.py` | LinkedIn-only phase-swapping runtime loop |
+| `agents_runtime/webagent_runtime.py` | Generic webagent runtime loop utilities |
+| `agents_runtime/linkedin_runtime.py` | LinkedIn-only phase-swapping runtime loop |
 | `tests/llm_test/` | Generic webagent LLM runtime notebook harness |
 | `tests/llm_test_linkedin/` | LinkedIn LLM runtime notebook harness |
 | `notebooks/filter_sync_debug/` | Targeted filter-sync debug notebook harness |
 
 Current important limitation:
 
-The notebooks and local wrappers prove the agent/tool flow, but the production API, worker server process, queue, MongoDB server integration, and frontend are still future work.
+The notebooks and local wrappers prove the agent/tool flow, but the production API, agent server process, queue, MongoDB server integration, and frontend are still future work.

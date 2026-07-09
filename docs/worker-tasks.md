@@ -59,3 +59,5 @@ Workers should persist:
 | LinkedIn detail fetch | `browser/linkedin.py`, `stages/listing_detail.py` |
 | Markdown page snapshot | `browser/markdown.py`, `parsers/page_markdown.py` |
 | Local persistence mock | `storage/embedded_mongo.py` |
+
+Candidate listing scoring should treat hard constraints as necessary, not sufficient, and should also apply a role-relevance gate so clearly unrelated hospitality/admin/customer-service/reception/driver/real-estate jobs are excluded even when they pass the legal filters. Exclusion rows should stay compact with `current` and `target` fields for notebook readability.
